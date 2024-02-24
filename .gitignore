@@ -1,10 +1,12 @@
 *.png
 *.jpg
 *.jpeg
-
+wandb/
 log/
 saves/
 .vscode/
+logs/
+outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

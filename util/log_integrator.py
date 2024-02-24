@@ -11,7 +11,7 @@ class Integrator:
     def __init__(self, logger, distributed=True, local_rank=0, world_size=1):
         self.values = {}
         self.counts = {}
-        self.hooks  = [] # List is used here to maintain insertion order
+        self.hooks = []  # List is used here to maintain insertion order
 
         self.logger = logger
 
@@ -34,6 +34,10 @@ class Integrator:
                 self.values[key] += tensor.mean().item()
 
     def add_dict(self, tensor_dict):
+        # print(type(tensor_dict))
+        # print("*" * 10)
+        # print(tensor_dict)
+        # print("*" * 10)
         for k, v in tensor_dict.items():
             self.add_tensor(k, v)
 
@@ -61,7 +65,7 @@ class Integrator:
 
         for k, v in self.values.items():
 
-            if k[:4] == 'hide':
+            if k[:4] == "hide":
                 continue
 
             avg = v / self.counts[k]
@@ -72,9 +76,8 @@ class Integrator:
                 torch.distributed.reduce(avg, dst=0)
 
                 if self.local_rank == 0:
-                    avg = (avg/self.world_size).cpu().item()
+                    avg = (avg / self.world_size).cpu().item()
                     self.logger.log_metrics(prefix, k, avg, it, f)
             else:
                 # Simple does it
                 self.logger.log_metrics(prefix, k, avg, it, f)
-

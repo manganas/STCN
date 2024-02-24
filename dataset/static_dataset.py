@@ -21,6 +21,7 @@ class StaticTransformDataset(Dataset):
     Method 0 - FSS style (class/1.jpg class/1.png)
     Method 1 - Others style (XXX.jpg XXX.png)
     """
+
     def __init__(self, root, method=0):
         self.root = root
         self.method = method
@@ -31,66 +32,98 @@ class StaticTransformDataset(Dataset):
             classes = os.listdir(self.root)
             for c in classes:
                 imgs = os.listdir(path.join(root, c))
-                jpg_list = [im for im in imgs if 'jpg' in im[-3:].lower()]
+                jpg_list = [im for im in imgs if "jpg" in im[-3:].lower()]
 
                 joint_list = [path.join(root, c, im) for im in jpg_list]
                 self.im_list.extend(joint_list)
 
         elif method == 1:
-            self.im_list = [path.join(self.root, im) for im in os.listdir(self.root) if '.jpg' in im]
+            self.im_list = [
+                path.join(self.root, im) for im in os.listdir(self.root) if ".jpg" in im
+            ]
 
-        print('%d images found in %s' % (len(self.im_list), root))
+        print("%d images found in %s" % (len(self.im_list), root))
 
         # These set of transform is the same for im/gt pairs, but different among the 3 sampled frames
-        self.pair_im_lone_transform = transforms.Compose([
-            transforms.ColorJitter(0.1, 0.05, 0.05, 0), # No hue change here as that's not realistic
-        ])
+        self.pair_im_lone_transform = transforms.Compose(
+            [
+                transforms.ColorJitter(
+                    0.1, 0.05, 0.05, 0
+                ),  # No hue change here as that's not realistic
+            ]
+        )
 
-        self.pair_im_dual_transform = transforms.Compose([
-            transforms.RandomAffine(degrees=20, scale=(0.9,1.1), shear=10, interpolation=InterpolationMode.BICUBIC, fill=im_mean),
-            transforms.Resize(384, InterpolationMode.BICUBIC),
-            transforms.RandomCrop((384, 384), pad_if_needed=True, fill=im_mean),
-        ])
+        self.pair_im_dual_transform = transforms.Compose(
+            [
+                transforms.RandomAffine(
+                    degrees=20,
+                    scale=(0.9, 1.1),
+                    shear=10,
+                    interpolation=InterpolationMode.BICUBIC,
+                    fill=im_mean,
+                ),
+                transforms.Resize(384, InterpolationMode.BICUBIC),
+                transforms.RandomCrop((384, 384), pad_if_needed=True, fill=im_mean),
+            ]
+        )
 
-        self.pair_gt_dual_transform = transforms.Compose([
-            transforms.RandomAffine(degrees=20, scale=(0.9,1.1), shear=10, interpolation=InterpolationMode.BICUBIC, fill=0),
-            transforms.Resize(384, InterpolationMode.NEAREST),
-            transforms.RandomCrop((384, 384), pad_if_needed=True, fill=0),
-        ])
+        self.pair_gt_dual_transform = transforms.Compose(
+            [
+                transforms.RandomAffine(
+                    degrees=20,
+                    scale=(0.9, 1.1),
+                    shear=10,
+                    interpolation=InterpolationMode.BICUBIC,
+                    fill=0,
+                ),
+                transforms.Resize(384, InterpolationMode.NEAREST),
+                transforms.RandomCrop((384, 384), pad_if_needed=True, fill=0),
+            ]
+        )
 
         # These transform are the same for all pairs in the sampled sequence
-        self.all_im_lone_transform = transforms.Compose([
-            transforms.ColorJitter(0.1, 0.05, 0.05, 0.05),
-            transforms.RandomGrayscale(0.05),
-        ])
+        self.all_im_lone_transform = transforms.Compose(
+            [
+                transforms.ColorJitter(0.1, 0.05, 0.05, 0.05),
+                transforms.RandomGrayscale(0.05),
+            ]
+        )
 
-        self.all_im_dual_transform = transforms.Compose([
-            transforms.RandomAffine(degrees=0, scale=(0.8, 1.5), fill=im_mean),
-            transforms.RandomHorizontalFlip(),
-        ])
+        self.all_im_dual_transform = transforms.Compose(
+            [
+                transforms.RandomAffine(degrees=0, scale=(0.8, 1.5), fill=im_mean),
+                transforms.RandomHorizontalFlip(),
+            ]
+        )
 
-        self.all_gt_dual_transform = transforms.Compose([
-            transforms.RandomAffine(degrees=0, scale=(0.8, 1.5), fill=0),
-            transforms.RandomHorizontalFlip(),
-        ])
+        self.all_gt_dual_transform = transforms.Compose(
+            [
+                transforms.RandomAffine(degrees=0, scale=(0.8, 1.5), fill=0),
+                transforms.RandomHorizontalFlip(),
+            ]
+        )
 
         # Final transform without randomness
-        self.final_im_transform = transforms.Compose([
-            transforms.ToTensor(),
-            im_normalization,
-        ])
+        self.final_im_transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                im_normalization,
+            ]
+        )
 
-        self.final_gt_transform = transforms.Compose([
-            transforms.ToTensor(),
-        ])
+        self.final_gt_transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+            ]
+        )
 
     def __getitem__(self, idx):
-        im = Image.open(self.im_list[idx]).convert('RGB')
+        im = Image.open(self.im_list[idx]).convert("RGB")
 
         if self.method == 0:
-            gt = Image.open(self.im_list[idx][:-3]+'png').convert('L')
+            gt = Image.open(self.im_list[idx][:-3] + "png").convert("L")
         else:
-            gt = Image.open(self.im_list[idx].replace('.jpg','.png')).convert('L')
+            gt = Image.open(self.im_list[idx].replace(".jpg", ".png")).convert("L")
 
         sequence_seed = np.random.randint(2147483647)
 
@@ -125,20 +158,14 @@ class StaticTransformDataset(Dataset):
         masks = torch.stack(masks, 0)
 
         info = {}
-        info['name'] = self.im_list[idx]
+        info["name"] = self.im_list[idx]
 
-        cls_gt = np.zeros((3, 384, 384), dtype=np.int)
-        cls_gt[masks[:,0] > 0.5] = 1
+        cls_gt = np.zeros((3, 384, 384), dtype=int)
+        cls_gt[masks[:, 0] > 0.5] = 1
 
-        data = {
-            'rgb': images,
-            'gt': masks,
-            'cls_gt': cls_gt,
-            'info': info
-        }
+        data = {"rgb": images, "gt": masks, "cls_gt": cls_gt, "info": info}
 
         return data
-
 
     def __len__(self):
         return len(self.im_list)
