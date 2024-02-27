@@ -19,10 +19,13 @@ requirements: environment
 	$(PYTHON_INTERPRETER) -m pip install pillow-simd
 	$(PYTHON_INTERPRETER) -m pip install progressbar2 opencv-python gitpython gdown git+https://github.com/cheind/py-thin-plate-spline
 
-## Set up python interpreter environment
 .PHONY: eval_davis
 eval_davis:
-	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS/2017' --output outputs/outputs_davis
+	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS/2017' --output outputs/outputs_davis --model saves/checkpoint_davis_300000.pth
+
+.PHONY: eval_davis_augmented
+eval_davis_augmented:
+	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS_Augmented/2017' --output outputs/outputs_davis_augmented --model saves/checkpoint_davis_augmented_600000.pth
 
 ## $(PYTHON_INTERPRETER) train.py --davis_path '/work3/s220493/DAVIS' --output outputs --static_root /work3/s220493/static
 .PHONY: train_static
@@ -31,7 +34,7 @@ train_static:
 	
 .PHONY: train_davis
 train_davis:
-	CUDA_VISIBLE_DEVICES=0,1 OMP_NUM_THREADS=4 torchrun --nproc_per_node=1 train.py --stage 2 --davis_root '/work3/s220493/DAVIS' 
+	CUDA_VISIBLE_DEVICES=1 OMP_NUM_THREADS=4 torchrun --nproc_per_node=1 train.py --stage 2 --davis_root '/work3/s220493/DAVIS' 
 	
 	
 .PHONY: train_davis_augmented

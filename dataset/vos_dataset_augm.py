@@ -11,7 +11,7 @@ import numpy as np
 from dataset.range_transform import im_normalization, im_mean
 from dataset.reseed import reseed
 
-# from vos_augmentation.vos_augmentation import VOS_Augmentation
+from dataset.data_augmentations import VOSAugmentations
 
 
 class VOSDataset(Dataset):
@@ -141,6 +141,8 @@ class VOSDataset(Dataset):
                 im_normalization,
             ]
         )
+
+        self.vos_augmentations = VOSAugmentations()
 
     def __get_data__(self, idx):
         video = self.videos[idx]
@@ -280,16 +282,24 @@ class VOSDataset(Dataset):
 
         new_data = self.__get_data__(j)
 
-        og_frames = original_data["rgb"]
-        og_masks = original_data["gt"]
-        og_tar_masks = original_data["cls_gt"]
-        og_sec_masks = original_data["sec_gt"]
+        # print(f"RGB frames: {type(original_data['rgb'])}, {original_data['rgb'].shape}")
+        # print(original_data['rgb'][0].shape)
+        # print(f"GT: {type(original_data['gt'])}, {original_data['gt'].shape}")
+        # print(f"Cls_gt: {type(original_data['cls_gt'])}, {original_data['cls_gt'].shape}")
+        # print(f"Sec_gt: {type(original_data['sec_gt'])}, {original_data['sec_gt'].shape}")
+        # print(f"Selector: {type(original_data['selector'])}")
+        # print(f"Info: {type(original_data['info'])}")
 
-        new_frames = new_data["rgb"]
-        new_masks = new_data["gt"]
+        # og_frames = original_data["rgb"]
+        # og_masks = original_data["gt"]
+        # og_tar_masks = original_data["cls_gt"]
+        # og_sec_masks = original_data["sec_gt"]
 
-        augm_frames = []
-        augm_masks = []
+        # new_frames = new_data["rgb"]
+        # new_masks = new_data["gt"]
+
+        # augm_frames = []
+        # augm_masks = []
 
         ## Problem if not davis@ not all frames have masks!
         # for i in range(og_frames.shape[0]):

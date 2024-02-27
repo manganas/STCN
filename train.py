@@ -11,9 +11,10 @@ import torch.distributed as distributed
 from model.model import STCNModel
 from dataset.static_dataset import StaticTransformDataset
 
-from dataset.vos_dataset import VOSDataset
+# from dataset.vos_dataset import VOSDataset
 
-# from dataset.vos_dataset_augm import VOSDataset
+from dataset.vos_dataset_augm import VOSDataset
+from util.plotting_utils import plot_first_frame_of_batch
 
 from util.logger import TensorboardLogger
 from util.hyper_para import HyperParameters
@@ -138,12 +139,13 @@ def renew_vos_loader(max_skip):
     #     is_bl=False,
     #     subset=load_sub_yv(),
     # )
+    subset_path = path.join(davis_root, "ImageSets", "2017", "train.txt")
     davis_dataset = VOSDataset(
         path.join(davis_root, "JPEGImages", "480p"),
         path.join(davis_root, "Annotations", "480p"),
         max_skip,
         is_bl=False,
-        subset=load_sub_davis(),
+        subset=load_sub_davis(subset_path),
     )
     train_dataset = ConcatDataset([davis_dataset] * 1)  #  + [yv_dataset])
 
@@ -266,16 +268,28 @@ if para["stage"] != 0:
 
 
 # WANDB Setup
-
-wandb.init(
-    # Set the project where this run will be logged
-    project="thesis-STCN",
-    # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-    name=f"experiment_{para["exp_name"]}",
-)
+exp_name = para["exp_name"]
+# wandb.init(
+#     # Set the project where this run will be logged
+#     project="thesis-STCN",
+#     # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+#     name=f"experiment_{exp_name}",
+# )
 
 n_iter = para["iterations"]
-print(f"Iterations: {n_iter}")
+print(f"Iterations: {n_iter}, Epochs: {total_epoch}")
+
+print(davis_root)
+
+
+## Test images
+data = next(iter(train_loader))  # b n_frames c h w
+
+plot_first_frame_of_batch(data, path="frame_contents_2.png")
+
+
+exit()
+
 
 """
 Starts training
@@ -301,12 +315,17 @@ try:
         for data in train_loader:
             total_loss = model.do_pass(data, total_iter)
 
-            wandb.log({"total_loss": total_loss})
+            break  #### <+++++++++++++++++++++++++++++++
+
+            # wandb.log({"total_loss": total_loss})
 
             total_iter += 1
 
             if total_iter >= para["iterations"]:
                 break
+
+        break  #### <+++++++++++++++++++++++++++++++
+
 finally:
     if not para["debug"] and model.logger is not None and total_iter > 5000:
         model.save(total_iter)
