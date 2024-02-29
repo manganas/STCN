@@ -14,7 +14,7 @@ from dataset.static_dataset import StaticTransformDataset
 # from dataset.vos_dataset import VOSDataset
 
 from dataset.vos_dataset_augm import VOSDataset
-from util.plotting_utils import plot_first_frame_of_batch
+from util.plotting_utils import plot_frame_of_batch
 
 from util.logger import TensorboardLogger
 from util.hyper_para import HyperParameters
@@ -26,12 +26,14 @@ import wandb
 """
 Initial setup
 """
+seed = 14159265
+
 # Init distributed environment
 distributed.init_process_group(backend="nccl")
 # Set seed to ensure the same initialization
-torch.manual_seed(14159265)
-np.random.seed(14159265)
-random.seed(14159265)
+torch.manual_seed(seed)
+np.random.seed(seed)
+random.seed(seed)
 
 print("CUDA Device count: ", torch.cuda.device_count())
 
@@ -281,15 +283,21 @@ print(f"Iterations: {n_iter}, Epochs: {total_epoch}")
 
 print(davis_root)
 
+data, p = next(iter(train_loader))
 
-## Test images
-data = next(iter(train_loader))  # b n_frames c h w
+for j, p_ in enumerate(p):
+    if p_:
+        for i in range(3):
+            plot_frame_of_batch(
+                data,
+                frame_number=i,
+                batch_element=j,
+                name=f"frame_content_b{j}_frame{i}.png",
+            )
 
-plot_first_frame_of_batch(data, path="frame_contents_2.png")
 
-
+print("Done!")
 exit()
-
 
 """
 Starts training

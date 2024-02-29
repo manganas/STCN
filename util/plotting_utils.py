@@ -1,4 +1,10 @@
-def plot_first_frame_of_batch(data: dict, path: str = "frame_content.png") -> None:
+from pathlib import Path
+import matplotlib.pyplot as plt
+
+
+def plot_frame_of_batch(
+    data: dict, frame_number=0, batch_element=0, name: str = "frame_content.png"
+) -> None:
     """
     data = {
             "rgb": images,
@@ -11,31 +17,33 @@ def plot_first_frame_of_batch(data: dict, path: str = "frame_content.png") -> No
 
     data is the yield output of the dataloader object
     """
+    _path_ = Path("./plots")
+    _path_.mkdir(exist_ok=True)
+
     frames = data["rgb"]
     gt = data["gt"]
     cls_gt = data["cls_gt"]
     sec_gt = data["sec_gt"]
 
     # Take the first of the batch
-    frames = data["rgb"][0]
-    gt = data["gt"][0]
-    cls_gt = data["cls_gt"][0]
-    sec_gt = data["sec_gt"][0]
+    frames = data["rgb"][batch_element]
+    gt = data["gt"][batch_element]
+    cls_gt = data["cls_gt"][batch_element]
+    sec_gt = data["sec_gt"][batch_element]
 
     # Take the first frame
-    frames = data["rgb"][0][0]
-    gt = data["gt"][0][0]
-    cls_gt = data["cls_gt"][0][0]
-    sec_gt = data["sec_gt"][0][0]
-
-    print(frames.shape, gt.shape, cls_gt.shape, sec_gt.shape)
-    import matplotlib.pyplot as plt
+    frames = frames[frame_number]
+    gt = gt[frame_number]
+    cls_gt = cls_gt[frame_number]
+    sec_gt = sec_gt[frame_number]
 
     frames = frames.permute(1, 2, 0)
     gt = gt.permute(1, 2, 0)
     sec_gt = sec_gt.permute(1, 2, 0)
 
     fig, ax = plt.subplots(1, 4)
+    fig.suptitle(f"Batch element: {batch_element}\n Frame number: {frame_number}")
+
     ax[0].imshow(frames)
     ax[0].set_title("frames")
     ax[0].axis("off")
@@ -54,5 +62,6 @@ def plot_first_frame_of_batch(data: dict, path: str = "frame_content.png") -> No
 
     fig.tight_layout()
 
+    path = Path.joinpath(_path_, name)
     plt.savefig(path)
     plt.show()

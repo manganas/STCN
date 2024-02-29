@@ -142,7 +142,15 @@ class VOSDataset(Dataset):
             ]
         )
 
-        self.vos_augmentations = VOSAugmentations()
+        self.vos_augmentations = VOSAugmentations(
+            select_instances=False, always_foreground=True
+        )
+        self.p_augm = 0.5
+        self.transformations_list = [
+            VOSAugmentations.random_horizontal_flip,
+            VOSAugmentations.random_scale,
+            VOSAugmentations.random_translation,
+        ]
 
     def __get_data__(self, idx):
         video = self.videos[idx]
@@ -152,6 +160,15 @@ class VOSDataset(Dataset):
         vid_im_path = path.join(self.im_root, video)
         vid_gt_path = path.join(self.gt_root, video)
         frames = self.frames[video]
+
+        augment = False
+        if np.random.rand() >= self.p_augm:
+            augment = True
+            j = np.random.randint(low=0, high=len(self.videos))
+            augm_video = self.videos[j]
+            augm_vid_im_path = path.join(self.im_root, augm_video)
+            augm_vid_gt_path = path.join(self.gt_root, augm_video)
+            augm_frames = self.frames[augm_video]
 
         trials = 0
         while trials < 5:
@@ -172,22 +189,83 @@ class VOSDataset(Dataset):
                 # Reverse time
                 frames_idx = frames_idx[::-1]
 
+            ## Augmentation jumps
+            if augment:
+                this_max_jump = min(len(augm_frames), self.max_jump)
+                start_idx = np.random.randint(len(augm_frames) - this_max_jump + 1)
+                f1_idx = start_idx + np.random.randint(this_max_jump + 1) + 1
+                f1_idx = min(
+                    f1_idx, len(augm_frames) - this_max_jump, len(augm_frames) - 1
+                )
+
+                f2_idx = f1_idx + np.random.randint(this_max_jump + 1) + 1
+                f2_idx = min(
+                    f2_idx, len(augm_frames) - this_max_jump // 2, len(augm_frames) - 1
+                )
+
+                augm_frames_idx = [start_idx, f1_idx, f2_idx]
+
+                if np.random.rand() < 0.5:
+                    # Reverse time
+                    augm_frames_idx = augm_frames_idx[::-1]
+
             sequence_seed = np.random.randint(2147483647)
             images = []
             masks = []
             target_object = None
 
-            for f_idx in frames_idx:
+            # for f_idx in frames_idx:
+            for i in range(len(frames_idx)):
+                f_idx = frames_idx[i]
+
                 jpg_name = frames[f_idx][:-4] + ".jpg"
                 png_name = frames[f_idx][:-4] + ".png"
                 info["frames"].append(jpg_name)
 
-                reseed(sequence_seed)
                 this_im = Image.open(path.join(vid_im_path, jpg_name)).convert("RGB")
+                this_gt = Image.open(path.join(vid_gt_path, png_name)).convert("P")
+
+                if augment:
+                    augm_f_idx = augm_frames_idx[i]
+                    augm_jpg_name = augm_frames[augm_f_idx][:-4] + ".jpg"
+                    augm_png_name = augm_frames[augm_f_idx][:-4] + ".png"
+
+                    that_im = Image.open(
+                        path.join(augm_vid_im_path, augm_jpg_name)
+                    ).convert("RGB")
+                    that_gt = Image.open(
+                        path.join(augm_vid_gt_path, augm_png_name)
+                    ).convert("P")
+
+                    horizontal_p = np.random.rand()
+                    scale_p = np.random.rand()
+                    scale_factor = np.random.randint(low=-50, high=50 + 1) * 0.01
+
+                    transformation_options = {
+                        "resize_w": 384,
+                        "resize_h": 384,
+                        "translation": (384 // 2, 384 // 2),
+                        "horizontal_p": horizontal_p,
+                        "scale_p": scale_p,
+                        "scale_factor": scale_factor,
+                    }
+
+                    this_im, this_gt = (
+                        self.vos_augmentations.get_augmented_data_per_frame(
+                            this_im,
+                            this_gt,
+                            that_im,
+                            that_gt,
+                            self.transformations_list,
+                            **transformation_options
+                        )
+                    )
+
+                reseed(sequence_seed)
                 this_im = self.all_im_dual_transform(this_im)
                 this_im = self.all_im_lone_transform(this_im)
+
                 reseed(sequence_seed)
-                this_gt = Image.open(path.join(vid_gt_path, png_name)).convert("P")
                 this_gt = self.all_gt_dual_transform(this_gt)
 
                 pairwise_seed = np.random.randint(2147483647)
@@ -259,7 +337,7 @@ class VOSDataset(Dataset):
             "info": info,
         }
 
-        return data
+        return data, augment
 
     def __getitem__(self, idx):
         """
@@ -273,228 +351,25 @@ class VOSDataset(Dataset):
         }
         """
 
-        original_data = self.__get_data__(idx)
+        data, a = self.__get_data__(idx)
 
-        # Get another video
-        j = np.random.randint(low=0, high=len(self.videos))
-        while j == idx:
-            j = np.random.randint(low=0, high=len(self.videos))
+        # # Get another video, if p>0.5
+        # seed = np.random.randint(2147483647)
+        # reseed(seed)
+        # p = np.random.rand()
+        # if p >= 0.5:
+        #     j = np.random.randint(low=0, high=len(self.videos))
 
-        new_data = self.__get_data__(j)
+        #     new_data = self.__get_data__(j)
 
-        # print(f"RGB frames: {type(original_data['rgb'])}, {original_data['rgb'].shape}")
-        # print(original_data['rgb'][0].shape)
-        # print(f"GT: {type(original_data['gt'])}, {original_data['gt'].shape}")
-        # print(f"Cls_gt: {type(original_data['cls_gt'])}, {original_data['cls_gt'].shape}")
-        # print(f"Sec_gt: {type(original_data['sec_gt'])}, {original_data['sec_gt'].shape}")
-        # print(f"Selector: {type(original_data['selector'])}")
-        # print(f"Info: {type(original_data['info'])}")
+        #     data = VOSAugmentations.get_augmented_data(data, new_data, [])
 
-        # og_frames = original_data["rgb"]
-        # og_masks = original_data["gt"]
-        # og_tar_masks = original_data["cls_gt"]
-        # og_sec_masks = original_data["sec_gt"]
+        ## Idea: Propta fortono kai augment eikones, san PIL.Image
+        # Meta kano ola ta alla gia augmented mask aki frames: dual transf etc..
+        # poy edo ta kanei otan travaei ta dedomena.
+        # Ligi prosoxi an tha allaksei to selector, alla vlepoyme
 
-        # new_frames = new_data["rgb"]
-        # new_masks = new_data["gt"]
-
-        # augm_frames = []
-        # augm_masks = []
-
-        ## Problem if not davis@ not all frames have masks!
-        # for i in range(og_frames.shape[0]):
-        #     augm_frame = og_frames[i].permute(1, 2, 0)
-        #     augm_mask = og_masks[i].permute(1, 2, 0)
-
-        #     new_frame = new_frames[i].permute(1, 2, 0)
-        #     new_mask = new_masks[i].permute(1, 2, 0)
-
-        #     augm_frame[new_mask > 0] = new_frame[new_mask > 0]
-        #     augm_mask[new_mask > 0] = 0.0
-
-        #     augm_frames.append(augm_frame.permute(2, 0, 1))
-        #     augm_masks.append(augm_mask.permute(2, 0, 1))
-
-        #     # og_tar_masks[i][new_masks[i]>0] = 0
-        #     # og_sec_masks[i][new_masks[i]>0] = 0
-
-        # augmented_data = {
-        #     "rgb": augm_frames,
-        #     "gt": augm_masks,
-        #     # "cls_gt": cls_gt,
-        #     # "sec_gt": sec_masks,
-        #     # "selector": selector,
-        #     # "info": info,
-        # }
-
-        return original_data
-
-    # def __getitem_OLD__(self, idx):
-
-    #     video = self.videos[idx]
-    #     info = {}
-    #     info["name"] = video
-
-    #     vid_im_path = path.join(self.im_root, video)
-    #     vid_gt_path = path.join(self.gt_root, video)
-    #     frames = self.frames[video]
-
-    #     # Get another video
-    #     j = np.random.randint(low=0, high=len(self.videos))
-    #     while j == idx:
-    #         j = np.random.randint(low=0, high=len(self.videos))
-
-    #     new_video = self.videos[j]
-    #     new_vid_im_path = path.join(self.im_root, new_video)
-    #     new_vid_gt_path = path.join(self.gt_root, new_video)
-    #     new_frames = self.frames[new_video]
-
-    #     trials = 0
-    #     while trials < 5:
-    #         info["frames"] = []  # Appended with actual frames
-
-    #         # Don't want to bias towards beginning/end
-    #         this_max_jump = min(len(frames), self.max_jump)
-    #         start_idx = np.random.randint(len(frames) - this_max_jump + 1)
-    #         f1_idx = start_idx + np.random.randint(this_max_jump + 1) + 1
-    #         f1_idx = min(f1_idx, len(frames) - this_max_jump, len(frames) - 1)
-
-    #         f2_idx = f1_idx + np.random.randint(this_max_jump + 1) + 1
-    #         f2_idx = min(f2_idx, len(frames) - this_max_jump // 2, len(frames) - 1)
-
-    #         frames_idx = [start_idx, f1_idx, f2_idx]
-
-    #         ### Augmentation ###
-    #         ####################
-    #         new_this_max_jump = min(len(new_frames), self.max_jump)
-    #         new_start_idx = np.random.randint(len(new_frames) - new_this_max_jump + 1)
-    #         new_f1_idx = new_start_idx + np.random.randint(new_this_max_jump + 1) + 1
-    #         new_f1_idx = min(
-    #             new_f1_idx, len(new_frames) - new_this_max_jump, len(new_frames) - 1
-    #         )
-
-    #         new_f2_idx = new_f1_idx + np.random.randint(new_this_max_jump + 1) + 1
-    #         new_f2_idx = min(
-    #             new_f2_idx,
-    #             len(new_frames) - new_this_max_jump // 2,
-    #             len(new_frames) - 1,
-    #         )
-
-    #         new_frames_idx = [new_start_idx, new_f1_idx, new_f2_idx]
-    #         ####################
-    #         ####################
-
-    #         if np.random.rand() < 0.5:
-    #             # Reverse time
-    #             frames_idx = frames_idx[::-1]
-
-    #         ### Augmentation ###
-    #         ####################
-    #         if np.random.rand() < 0.5:
-    #             # Reverse time for augmentation frame
-    #             new_frames_idx = new_frames_idx[::-1]
-    #         ####################
-    #         ####################
-
-    #         sequence_seed = np.random.randint(2147483647)
-    #         images = []
-    #         masks = []
-    #         target_object = None
-
-    #         ### Augmentation ###
-    #         ####################
-    #         new_images = []
-    #         new_masks = []
-    #         ####################
-    #         ####################
-
-    #         for f_idx in frames_idx:
-    #             jpg_name = frames[f_idx][:-4] + ".jpg"
-    #             png_name = frames[f_idx][:-4] + ".png"
-    #             info["frames"].append(jpg_name)
-
-    #             reseed(sequence_seed)
-    #             this_im = Image.open(path.join(vid_im_path, jpg_name)).convert("RGB")
-    #             this_im = self.all_im_dual_transform(this_im)
-    #             this_im = self.all_im_lone_transform(this_im)
-    #             reseed(sequence_seed)
-    #             this_gt = Image.open(path.join(vid_gt_path, png_name)).convert("P")
-    #             this_gt = self.all_gt_dual_transform(this_gt)
-
-    #             pairwise_seed = np.random.randint(2147483647)
-    #             reseed(pairwise_seed)
-    #             this_im = self.pair_im_dual_transform(this_im)
-    #             this_im = self.pair_im_lone_transform(this_im)
-    #             reseed(pairwise_seed)
-    #             this_gt = self.pair_gt_dual_transform(this_gt)
-
-    #             this_im = self.final_im_transform(this_im)
-    #             this_gt = np.array(this_gt)
-
-    #             images.append(this_im)
-    #             masks.append(this_gt)
-
-    #         images = torch.stack(images, 0)
-
-    #         labels = np.unique(masks[0])
-    #         # Remove background
-    #         labels = labels[labels != 0]
-
-    #         if self.is_bl:
-    #             # Find large enough labels
-    #             good_lables = []
-    #             for l in labels:
-    #                 pixel_sum = (masks[0] == l).sum()
-    #                 if pixel_sum > 10 * 10:
-    #                     # OK if the object is always this small
-    #                     # Not OK if it is actually much bigger
-    #                     if pixel_sum > 30 * 30:
-    #                         good_lables.append(l)
-    #                     elif (
-    #                         max((masks[1] == l).sum(), (masks[2] == l).sum()) < 20 * 20
-    #                     ):
-    #                         good_lables.append(l)
-    #             labels = np.array(good_lables, dtype=np.uint8)
-
-    #         if len(labels) == 0:
-    #             target_object = -1  # all black if no objects
-    #             has_second_object = False
-    #             trials += 1
-    #         else:
-    #             target_object = np.random.choice(labels)
-    #             has_second_object = len(labels) > 1
-    #             if has_second_object:
-    #                 labels = labels[labels != target_object]
-    #                 second_object = np.random.choice(labels)
-    #             break
-
-    #     masks = np.stack(masks, 0)
-    #     tar_masks = (masks == target_object).astype(np.float32)[:, np.newaxis, :, :]
-    #     if has_second_object:
-    #         sec_masks = (masks == second_object).astype(np.float32)[:, np.newaxis, :, :]
-    #         selector = torch.FloatTensor([1, 1])
-    #     else:
-    #         sec_masks = np.zeros_like(tar_masks)
-    #         selector = torch.FloatTensor([1, 0])
-
-    #     cls_gt = np.zeros((3, 384, 384), dtype=int)
-    #     cls_gt[tar_masks[:, 0] > 0.5] = 1
-    #     cls_gt[sec_masks[:, 0] > 0.5] = 2
-
-    #     ## Original data
-    #     data = {
-    #         "rgb": images,
-    #         "gt": tar_masks,
-    #         "cls_gt": cls_gt,
-    #         "sec_gt": sec_masks,
-    #         "selector": selector,
-    #         "info": info,
-    #     }
-
-    #     ## augmented data dict
-    #     augmented_data = self.vos_augment(original_data=data, new_video_idx=j)
-
-    #     return data
+        return data, a
 
     def __len__(self):
         return len(self.videos)

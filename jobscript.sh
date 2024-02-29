@@ -16,4 +16,6 @@ module swap cuda/11.6
 
 source ../venv/bin/activate
 
+## i python ....
+
 make train_davis_augmented
