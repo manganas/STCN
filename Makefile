@@ -32,9 +32,14 @@ eval_davis_augmented:
 train_static:
 	CUDA_VISIBLE_DEVICES=0,1 OMP_NUM_THREADS=4 $(PYTHON_INTERPRETER) -m torch.distributed.launch --nproc_per_node=1 train.py --stage 0 --static_root /work3/s220493/static --exp_name 'static' --save_model_path './saves'
 	
+# .PHONY: train_davis
+# train_davis:
+# 	CUDA_VISIBLE_DEVICES=1 OMP_NUM_THREADS=4 torchrun train.py
+	
+	
 .PHONY: train_davis
 train_davis:
-	CUDA_VISIBLE_DEVICES=1 OMP_NUM_THREADS=4 torchrun --nproc_per_node=1 train.py --stage 2 --davis_root '/work3/s220493/DAVIS' 
+	CUDA_VISIBLE_DEVICES=0,1 OMP_NUM_THREADS=4 torchrun --nproc_per_node=1 train.py stage=2 davis_root='/work3/s220493/DAVIS' 
 	
 	
 .PHONY: train_davis_augmented

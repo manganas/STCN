@@ -16,6 +16,6 @@ module swap cuda/11.6
 
 source ../venv/bin/activate
 
-## i python ....
-
-make train_davis_augmented
+#0, 0.25, 0.5, 0.75
+augm_p=0
+torchrun --nproc_per_node=1 train.py  exp_name="DAVIS_augmentation_p_$augm_p" augmentations.augmentation_p=$augm_p
