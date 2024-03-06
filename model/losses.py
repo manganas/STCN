@@ -1,7 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from util.tensor_util import compute_tensor_iu
+from util.tensor_util import (
+    compute_tensor_iu,
+    compute_tensor_iou,
+    compute_accuracy,
+    compute_f1,
+)
 
 from collections import defaultdict
 
@@ -66,10 +71,16 @@ class LossComputer:
         b, s, _, _, _ = data["gt"].shape
         selector = data.get("selector", None)
 
+        n_segs = 0
+        accuracy = 0
+        iou = 0
+        f1 = 0
         for i in range(1, s):
             # Have to do it in a for-loop like this since not every entry has the second object
             # Well it's not a lot of iterations anyway
+
             for j in range(b):
+
                 if selector is not None and selector[j][1] > 0.5:
 
                     loss, p = self.bce(
@@ -96,11 +107,40 @@ class LossComputer:
             losses["hide_iou/i"] += new_total_i
             losses["hide_iou/u"] += new_total_u
 
+            n_segs += 1
+
+            iou += compute_tensor_iou(data["mask_%d" % i] > 0.5, data["gt"][:, i] > 0.5)
+
+            accuracy += compute_accuracy(
+                data["mask_%d" % i] > 0.5, data["gt"][:, i] > 0.5
+            )
+
+            f1 += compute_f1(data["mask_%d" % i] > 0.5, data["gt"][:, i] > 0.5)
+
             if selector is not None:
+                n_segs += 1
                 new_total_i, new_total_u = compute_tensor_iu(
                     data["sec_mask_%d" % i] > 0.5, data["sec_gt"][:, i] > 0.5
                 )
                 losses["hide_iou/sec_i"] += new_total_i
                 losses["hide_iou/sec_u"] += new_total_u
+                iou += compute_tensor_iou(
+                    data["sec_mask_%d" % i] > 0.5, data["sec_gt"][:, i] > 0.5
+                )
+                accuracy += compute_accuracy(
+                    data["sec_mask_%d" % i] > 0.5, data["sec_gt"][:, i] > 0.5
+                )
+
+                f1 += compute_f1(
+                    data["sec_mask_%d" % i] > 0.5, data["sec_gt"][:, i] > 0.5
+                )
+
+        total_acc = accuracy / (b * n_segs)
+        total_iou = iou / (b * n_segs)
+        total_f1 = f1 / (b * n_segs)
+
+        losses["accuracy"] = total_acc
+        losses["iou"] = total_iou
+        losses["f1"] = total_f1
 
         return losses

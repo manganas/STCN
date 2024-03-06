@@ -14,8 +14,6 @@ from model.losses import LossComputer, iou_hooks_mo, iou_hooks_so
 from util.log_integrator import Integrator
 from util.image_saver import pool_pairs
 
-import matplotlib.pyplot as plt
-
 
 class STCNModel:
     def __init__(self, para, logger=None, save_path=None, local_rank=0, world_size=1):
@@ -190,9 +188,6 @@ class STCNModel:
                 out["logits_1"] = prev_logits
                 out["logits_2"] = this_logits
 
-            # print(list(data.keys()))
-            # print(list(out.keys()))
-
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
 
@@ -234,17 +229,23 @@ class STCNModel:
             # This should be done outside autocast
             # but I trained it like this and it worked fine
             # so I am keeping it this way for reference
-            self.optimizer.zero_grad(set_to_none=True)
-            if self.para["amp"]:
-                self.scaler.scale(losses["total_loss"]).backward()
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                losses["total_loss"].backward()
-                self.optimizer.step()
-            self.scheduler.step()
 
-            return losses["total_loss"]
+            if self._is_train:
+                self.optimizer.zero_grad(set_to_none=True)
+                if self.para["amp"]:
+                    self.scaler.scale(losses["total_loss"]).backward()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    losses["total_loss"].backward()
+                    self.optimizer.step()
+                self.scheduler.step()
+
+            # Calculate mean batch accuracy
+            # batch_mean_accuracy = svos_accuracy(out, data)
+            # Calculate mean J&F
+
+            return losses
 
     def save(self, it):
         if self.save_path is None:
