@@ -8,68 +8,159 @@ import numpy as np
 from pathlib import Path
 
 
-class VOSAugmentations:
+class VOSTransformations:
 
-    def __init__(self, select_instances: bool, always_foreground: bool):
-        pass
+    def random_scale(p_scale: float):
+        def random_scale_wrapper(
+            frame: ArrayLike | Tensor, mask: ArrayLike | Tensor, **kwargs
+        ) -> ArrayLike | Tensor:
+            """
+            Resizes the image and crops the center part, sot that resulthas the same dims as input
+            Scale is percentage increase or decrease: -0.99 -> 99% decrease in original dims
+            """
+            p = kwargs["scale_p"]
+            if p >= p_scale:
+                # print("No scaling")
+                return frame, mask
 
-    def random_scale(
-        frame: ArrayLike | Tensor, mask: ArrayLike | Tensor, **kwargs
-    ) -> ArrayLike | Tensor:
-        """
-        Resizes the image and crops the center part, sot that resulthas the same dims as input
-        Scale is percentage increase or decrease: -0.99 -> 99% decrease in og dims
-        """
-        p = kwargs["scale_p"]
-        if p < 0.5:
+            # print("Scaling")
+            s = kwargs["scale_factor"]
+            if s < -0.99:
+                s = -0.99
+
+            w, h = frame.size
+            w_s = int((1 + s) * w)
+            h_s = int((1 + s) * h)
+
+            frame = frame.resize((w_s, h_s))
+            mask = mask.resize((w_s, h_s))
+
+            w_mid = w_s // 2
+            h_mid = h_s // 2
+            left, top, right, bottom = (
+                w_mid - w // 2,
+                h_mid - h // 2,
+                w_mid + w // 2,
+                h_mid + h // 2,
+            )
+            frame = frame.crop((left, top, right, bottom))
+            mask = mask.crop((left, top, right, bottom))
+
             return frame, mask
 
-        s = kwargs["scale_factor"]
-        if s < -0.99:
-            s = -0.99
+        return random_scale_wrapper
 
-        # frame = Image.from
+    def random_horizontal_flip(p_horizontal_flip: float):
+        def random_horizontal_flip_wrapper(
+            frame: Image.Image, mask: Image.Image, **kwargs
+        ) -> tuple[Image.Image]:
 
-        w, h = frame.size
-        w_s = int((1 + s) * w)
-        h_s = int((1 + s) * h)
+            p = kwargs["horizontal_p"]
+            if p >= p_horizontal_flip:
+                # print("No flipping")
+                return frame, mask
 
-        frame = frame.resize((w_s, h_s))
-        mask = mask.resize((w_s, h_s))
-
-        w_mid = w_s // 2
-        h_mid = h_s // 2
-        left, top, right, bottom = (
-            w_mid - w // 2,
-            h_mid - h // 2,
-            w_mid + w // 2,
-            h_mid + h // 2,
-        )
-        frame = frame.crop((left, top, right, bottom))
-        mask = mask.crop((left, top, right, bottom))
-
-        return frame, mask
-
-    def random_horizontal_flip(
-        frame: Image.Image, mask: Image.Image, **kwargs
-    ) -> tuple[Image.Image]:
-        p = kwargs["horizontal_p"]
-        if p >= 0.5:
+            # print("Flipping")
             frame = frame.transpose(method=Image.FLIP_LEFT_RIGHT)
             mask = mask.transpose(method=Image.FLIP_LEFT_RIGHT)
-        return frame, mask
+            return frame, mask
 
-    def random_translation(
-        frame: Image.Image, mask: Image.Image, **kwargs
-    ) -> tuple[Image.Image]:
-        """
-        Random translation for the frame and the mask. Padded with zeros.
-        It is used as a random positioning of the new image region.
-        """
-        translation = kwargs["translation"]
-        return frame.rotate(0, translate=translation), mask.rotate(
-            0, translate=translation
-        )
+        return random_horizontal_flip_wrapper
+
+    def random_translation(p_translation: float):
+        def random_translation_wrapper(
+            frame: Image.Image, mask: Image.Image, **kwargs
+        ) -> tuple[Image.Image]:
+            """
+            Random translation for the frame and the mask. Padded with zeros.
+            It is used as a random positioning of the new image region.
+            """
+
+            p = kwargs["translation_p"]
+
+            if p >= p_translation:
+                # print("No translation")
+                return frame, mask
+
+            # print("Translation")
+            translation = kwargs["translation"]
+
+            return frame.rotate(0, translate=translation), mask.rotate(
+                0, translate=translation
+            )
+
+        return random_translation_wrapper
+
+
+class VOSAugmentations:
+
+    def __init__(
+        self,
+        select_instances: bool,
+        always_foreground: bool,
+        include_new_instances: bool,
+    ):
+        self.select_instances = select_instances
+        self.always_foreground = always_foreground
+        self.include_new_instances = include_new_instances
+
+    # def random_scale(
+    #     frame: ArrayLike | Tensor, mask: ArrayLike | Tensor, **kwargs
+    # ) -> ArrayLike | Tensor:
+    #     """
+    #     Resizes the image and crops the center part, sot that resulthas the same dims as input
+    #     Scale is percentage increase or decrease: -0.99 -> 99% decrease in og dims
+    #     """
+    #     p = kwargs["scale_p"]
+    #     if p < 0.5:
+    #         return frame, mask
+
+    #     s = kwargs["scale_factor"]
+    #     if s < -0.99:
+    #         s = -0.99
+
+    #     # frame = Image.from
+
+    #     w, h = frame.size
+    #     w_s = int((1 + s) * w)
+    #     h_s = int((1 + s) * h)
+
+    #     frame = frame.resize((w_s, h_s))
+    #     mask = mask.resize((w_s, h_s))
+
+    #     w_mid = w_s // 2
+    #     h_mid = h_s // 2
+    #     left, top, right, bottom = (
+    #         w_mid - w // 2,
+    #         h_mid - h // 2,
+    #         w_mid + w // 2,
+    #         h_mid + h // 2,
+    #     )
+    #     frame = frame.crop((left, top, right, bottom))
+    #     mask = mask.crop((left, top, right, bottom))
+
+    #     return frame, mask
+
+    # def random_horizontal_flip(
+    #     frame: Image.Image, mask: Image.Image, **kwargs
+    # ) -> tuple[Image.Image]:
+    #     p = kwargs["horizontal_p"]
+    #     if p >= 0.5:
+    #         frame = frame.transpose(method=Image.FLIP_LEFT_RIGHT)
+    #         mask = mask.transpose(method=Image.FLIP_LEFT_RIGHT)
+    #     return frame, mask
+
+    # def random_translation(
+    #     frame: Image.Image, mask: Image.Image, **kwargs
+    # ) -> tuple[Image.Image]:
+    #     """
+    #     Random translation for the frame and the mask. Padded with zeros.
+    #     It is used as a random positioning of the new image region.
+    #     """
+    #     translation = kwargs["translation"]
+    #     return frame.rotate(0, translate=translation), mask.rotate(
+    #         0, translate=translation
+    #     )
 
     def apply_transformations(
         self,

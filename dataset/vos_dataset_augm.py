@@ -11,7 +11,7 @@ import numpy as np
 from dataset.range_transform import im_normalization, im_mean
 from dataset.reseed import reseed
 
-from dataset.data_augmentations import VOSAugmentations
+from dataset.data_augmentations import VOSAugmentations, VOSTransformations
 
 
 class VOSDataset(Dataset):
@@ -25,7 +25,16 @@ class VOSDataset(Dataset):
     - The distance between frames is controlled
     """
 
-    def __init__(self, im_root, gt_root, max_jump, is_bl, subset=None):
+    def __init__(
+        self,
+        im_root,
+        gt_root,
+        max_jump,
+        is_bl,
+        subset=None,
+        train: bool = True,
+        para=None,
+    ):
         self.im_root = im_root
         self.gt_root = gt_root
         self.max_jump = max_jump
@@ -142,14 +151,31 @@ class VOSDataset(Dataset):
             ]
         )
 
+        self.train = train
+
+        ## Augmentation haparams
+        # Probs
+        augmentation_params = para["augmentations"]
+
+        self.p_augm = augmentation_params["augmentation_p"]
+        print(self.p_augm)
+
+        p_horizontal_flip = augmentation_params["horizontal_flip_p"]
+        p_scale = augmentation_params["scale_p"]
+        p_translation = augmentation_params["translation_p"]
+
+        # Params
+        self.scale_factor_lim = augmentation_params["scale_factor_lim"]
+        self.translation_lim = augmentation_params["translation_lim"]
+
         self.vos_augmentations = VOSAugmentations(
-            select_instances=False, always_foreground=True
+            select_instances=False, always_foreground=True, include_new_instances=False
         )
-        self.p_augm = 0.5
+
         self.transformations_list = [
-            VOSAugmentations.random_horizontal_flip,
-            VOSAugmentations.random_scale,
-            VOSAugmentations.random_translation,
+            VOSTransformations.random_horizontal_flip(p_horizontal_flip),
+            VOSTransformations.random_scale(p_scale),
+            VOSTransformations.random_translation(p_translation),
         ]
 
     def __get_data__(self, idx):
@@ -162,13 +188,18 @@ class VOSDataset(Dataset):
         frames = self.frames[video]
 
         augment = False
-        if np.random.rand() >= self.p_augm:
+        if self.train and np.random.rand() < self.p_augm:
             augment = True
             j = np.random.randint(low=0, high=len(self.videos))
             augm_video = self.videos[j]
             augm_vid_im_path = path.join(self.im_root, augm_video)
             augm_vid_gt_path = path.join(self.gt_root, augm_video)
             augm_frames = self.frames[augm_video]
+
+        # if augment:
+        #     print("Augment")
+        # else:
+        #     print("Not augment")
 
         trials = 0
         while trials < 5:
@@ -237,14 +268,33 @@ class VOSDataset(Dataset):
                         path.join(augm_vid_gt_path, augm_png_name)
                     ).convert("P")
 
+                    # Transforms to be applied to the new mask
                     horizontal_p = np.random.rand()
+
                     scale_p = np.random.rand()
-                    scale_factor = np.random.randint(low=-50, high=50 + 1) * 0.01
+                    scale_factor = (
+                        np.random.randint(
+                            low=-self.scale_factor_lim, high=self.scale_factor_lim
+                        )
+                        * 0.01
+                    )
+
+                    translation_p = np.random.rand()
+                    translation_w_lim = np.random.randint(
+                        low=-int(384 * self.translation_lim),
+                        high=int(384 * self.translation_lim),
+                    )
+
+                    translation_h_lim = np.random.randint(
+                        low=-int(384 * self.translation_lim),
+                        high=int(384 * self.translation_lim),
+                    )
 
                     transformation_options = {
                         "resize_w": 384,
                         "resize_h": 384,
-                        "translation": (384 // 2, 384 // 2),
+                        "translation_p": translation_p,
+                        "translation": (translation_w_lim, translation_h_lim),
                         "horizontal_p": horizontal_p,
                         "scale_p": scale_p,
                         "scale_factor": scale_factor,
@@ -337,7 +387,7 @@ class VOSDataset(Dataset):
             "info": info,
         }
 
-        return data, augment
+        return data
 
     def __getitem__(self, idx):
         """
@@ -351,7 +401,7 @@ class VOSDataset(Dataset):
         }
         """
 
-        data, a = self.__get_data__(idx)
+        data = self.__get_data__(idx)
 
         # # Get another video, if p>0.5
         # seed = np.random.randint(2147483647)
@@ -369,7 +419,7 @@ class VOSDataset(Dataset):
         # poy edo ta kanei otan travaei ta dedomena.
         # Ligi prosoxi an tha allaksei to selector, alla vlepoyme
 
-        return data, a
+        return data
 
     def __len__(self):
         return len(self.videos)
