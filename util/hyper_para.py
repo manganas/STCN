@@ -144,15 +144,7 @@ class HyperParameters:
             self.args["iterations"] = none_or_default(self.args["iterations"], 150000)
             self.args["steps"] = none_or_default(self.args["steps"], [125000])
             self.args["single_object"] = False
-        elif self.args["stage"] == 4:
-            # 150K main training for after static image pretraining
-            self.args["lr"] = none_or_default(self.args["lr"], 1e-5)
-            self.args["batch_size"] = none_or_default(self.args["batch_size"], 4)
-            self.args["iterations"] = none_or_default(
-                self.args["iterations"], 150000
-            )  # 150000
-            self.args["steps"] = none_or_default(self.args["steps"], [125000])
-            self.args["single_object"] = True
+
         else:
             raise NotImplementedError
 

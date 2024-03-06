@@ -1,0 +1,45 @@
+# torchrun
+# nproc_per_node: 2
+
+# data paths
+static_root: "../static"
+bl_root: '../BL30K'
+yv_root: '../YouTube'
+davis_root: '/work3/s220493/DAVIS'
+
+# STCN
+benchmark: True
+no_amp: True
+amp: False
+stage: 2
+single_object: False
+steps: [250000]
+
+# Training parameters
+num_workers: 8
+batch_size: 4
+iterations: 37500 # 2.5k epochs
+gamma: 0.1
+lr: 0.00001
+
+
+
+
+# Loading
+load_network: null
+load_model: null
+id: 'NULL'
+
+# to reduce the logging ot the out log file
+debug: False
+local-rank: 0
+
+# Save models and netowrks path
+save_model_path: '/work3/s220493/saves/'
+exp_name: 'davis'
+
+
+
+### Augmentations
+defaults:
+    - augmentations: exp1

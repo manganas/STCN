@@ -1,0 +1,18 @@
+
+# Augmentation probability
+augmentation_p: 1
+
+# Tranformations for new mask params
+
+# between -99 and 99
+scale_p: 0.5
+scale_factor_lim: 50
+
+# Translation
+translation_p: 0.5
+translation_lim: 0.5 # half of height and width
+
+# Horizontal flip
+horizontal_flip_p: 0.5
+
+
