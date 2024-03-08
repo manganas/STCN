@@ -60,6 +60,10 @@ class VOSDataset(Dataset):
             % (len(self.videos), len(vid_list), im_root)
         )
 
+        # Image dimensions
+        self.resize_h = 384
+        self.resize_w = 384
+
         # These set of transform is the same for im/gt pairs, but different among the 3 sampled frames
         self.pair_im_lone_transform = transforms.Compose(
             [
@@ -103,7 +107,7 @@ class VOSDataset(Dataset):
                 [
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomResizedCrop(
-                        (384, 384),
+                        (self.resize_h, self.resize_w),
                         scale=(0.25, 1.00),
                         interpolation=InterpolationMode.BICUBIC,
                     ),
@@ -114,7 +118,7 @@ class VOSDataset(Dataset):
                 [
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomResizedCrop(
-                        (384, 384),
+                        (self.resize_h, self.resize_w),
                         scale=(0.25, 1.00),
                         interpolation=InterpolationMode.NEAREST,
                     ),
@@ -125,7 +129,7 @@ class VOSDataset(Dataset):
                 [
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomResizedCrop(
-                        (384, 384),
+                        (self.resize_h, self.resize_w),
                         scale=(0.36, 1.00),
                         interpolation=InterpolationMode.BICUBIC,
                     ),
@@ -136,7 +140,7 @@ class VOSDataset(Dataset):
                 [
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomResizedCrop(
-                        (384, 384),
+                        (self.resize_h, self.resize_w),
                         scale=(0.36, 1.00),
                         interpolation=InterpolationMode.NEAREST,
                     ),
@@ -158,24 +162,25 @@ class VOSDataset(Dataset):
         augmentation_params = para["augmentations"]
 
         self.p_augm = augmentation_params["augmentation_p"]
-        print(self.p_augm)
+        print(f"Augmentation p: {self.p_augm}")
 
         p_horizontal_flip = augmentation_params["horizontal_flip_p"]
-        p_scale = augmentation_params["scale_p"]
-        p_translation = augmentation_params["translation_p"]
 
         # Params
-        self.scale_factor_lim = augmentation_params["scale_factor_lim"]
+        self.scale_factor_lower_lim = augmentation_params["scale_factor_lower_lim"]
+        self.scale_factor_upper_lim = augmentation_params["scale_factor_upper_lim"]
         self.translation_lim = augmentation_params["translation_lim"]
 
         self.vos_augmentations = VOSAugmentations(
-            select_instances=False, always_foreground=True, include_new_instances=False
+            select_instances=augmentation_params['select_instances'],
+            foreground=augmentation_params['foreground_p'],
+            include_new_instances=augmentation_params['include_new_instances'],
         )
 
         self.transformations_list = [
             VOSTransformations.random_horizontal_flip(p_horizontal_flip),
-            VOSTransformations.random_scale(p_scale),
-            VOSTransformations.random_translation(p_translation),
+            VOSTransformations.random_scale,
+            VOSTransformations.random_translation,
         ]
 
     def __get_data__(self, idx):
@@ -271,32 +276,26 @@ class VOSDataset(Dataset):
                     # Transforms to be applied to the new mask
                     horizontal_p = np.random.rand()
 
-                    scale_p = np.random.rand()
-                    scale_factor = (
-                        np.random.randint(
-                            low=-self.scale_factor_lim, high=self.scale_factor_lim
-                        )
-                        * 0.01
+                    scale_factor = np.random.uniform(
+                        low=self.scale_factor_lower_lim,
+                        high=self.scale_factor_upper_lim,
                     )
 
-                    translation_p = np.random.rand()
                     translation_w_lim = np.random.randint(
-                        low=-int(384 * self.translation_lim),
-                        high=int(384 * self.translation_lim),
+                        low=-int(self.resize_w * self.translation_lim),
+                        high=int(self.resize_w * self.translation_lim),
                     )
 
                     translation_h_lim = np.random.randint(
-                        low=-int(384 * self.translation_lim),
-                        high=int(384 * self.translation_lim),
+                        low=-int(self.resize_h * self.translation_lim),
+                        high=int(self.resize_h * self.translation_lim),
                     )
 
                     transformation_options = {
-                        "resize_w": 384,
-                        "resize_h": 384,
-                        "translation_p": translation_p,
+                        "resize_w": self.resize_w,
+                        "resize_h": self.resize_h,
                         "translation": (translation_w_lim, translation_h_lim),
                         "horizontal_p": horizontal_p,
-                        "scale_p": scale_p,
                         "scale_factor": scale_factor,
                     }
 
@@ -307,7 +306,7 @@ class VOSDataset(Dataset):
                             that_im,
                             that_gt,
                             self.transformations_list,
-                            **transformation_options
+                            **transformation_options,
                         )
                     )
 
@@ -374,7 +373,7 @@ class VOSDataset(Dataset):
             sec_masks = np.zeros_like(tar_masks)
             selector = torch.FloatTensor([1, 0])
 
-        cls_gt = np.zeros((3, 384, 384), dtype=int)
+        cls_gt = np.zeros((3, self.resize_h, self.resize_w), dtype=int)
         cls_gt[tar_masks[:, 0] > 0.5] = 1
         cls_gt[sec_masks[:, 0] > 0.5] = 2
 
