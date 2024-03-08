@@ -19,7 +19,7 @@ def compute_accuracy(seg, gt):
     """
     biased in mainly reporting how well you identify background
     """
-    _, _, h, w = seg.shape
+    _, _, h, w = seg.shape # check to verify that h, w are correct, not c
     acc = (seg == gt).float().sum() / (h * w)
     return acc
 
