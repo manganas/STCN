@@ -110,9 +110,11 @@ def train(para):
     # Load pertrained model if needed
     if para["load_model"] is not None:
         total_iter = model.load_model(para["load_model"])
+        current_epoch = model.load_model(para["current_epoch"])
         print("Previously trained model loaded!")
     else:
         total_iter = 0
+        current_epoch=0
 
     if para["load_network"] is not None:
         model.load_network(para["load_network"])
@@ -278,8 +280,10 @@ def train(para):
     """
     Determine current/max epoch
     """
-    total_epoch = math.ceil(para["iterations"] / len(train_loader))
-    current_epoch = total_iter // len(train_loader)
+    # total_epoch = math.ceil(para["iterations"] / len(train_loader))
+    total_epoch = para["n_epochs"]
+    # current_epoch = total_iter // len(train_loader)
+     
     print(
         "Number of training epochs (the last epoch might not complete): ", total_epoch
     )
@@ -293,15 +297,17 @@ def train(para):
 
     # WANDB Setup
     exp_name = para["exp_name"]
-    wandb.init(
-        # Set the project where this run will be logged
-        project="thesis-STCN",
-        # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"experiment_{exp_name}",
-    )
+    if local_rank == 0:
+        wandb.init(
+            # Set the project where this run will be logged
+            project="thesis-STCN",
+            # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+            name=f"experiment_{exp_name}",
+        )
 
     n_iter = para["iterations"]
     print(f"Iterations: {n_iter}, Epochs: {total_epoch}")
+    print(f"Trainloader length: {len(train_loader)}, Iterations: {para['iterations']}")
 
     print(davis_root)
 
@@ -340,11 +346,9 @@ def train(para):
             train_sampler.set_epoch(e)
 
             # Train loop
-            print("Training:")
             train_total_loss = 0
             train_iou = 0
             train_f1 = 0
-            train_accuracy = 0
 
             model.train()
             for data in train_loader:
@@ -355,33 +359,22 @@ def train(para):
 
                 train_total_loss += losses["total_loss"]
                 train_iou += losses["iou"]
-                train_accuracy += losses["accuracy"]
                 train_f1 += losses["f1"]
 
                 #### <+++++++++++++++++++++++++++++++
 
-                # wandb.log({"total_loss": total_loss})
-
                 total_iter += 1
-
                 if total_iter >= para["iterations"]:
                     break
 
-            wandb.log(
-                {
-                    "Training loss": train_total_loss / (len(train_loader)) * b,
-                    "Training iou": train_iou / (len(train_loader)) * b,
-                    "Training accuracy": train_accuracy / (len(train_loader)) * b,
-                    "Training f1": train_f1 / (len(train_loader)) * b,
-                }
-            )
+            # print(f"Training loss: {train_total_loss / (len(train_loader)) * b}")
+            # print(f"Training iou: {train_iou / (len(train_loader)) * b}")
+            # print(f"Training f1: {train_f1 / (len(train_loader)) * b}")
 
             # Eval loop
-            print("Eval:")
             val_total_loss = 0
             val_iou = 0
             val_f1 = 0
-            val_accuracy = 0
 
             model.val()
             for data in val_loader:
@@ -393,26 +386,33 @@ def train(para):
 
                 val_total_loss += losses["total_loss"]
                 val_iou += losses["iou"]
-                val_accuracy += losses["accuracy"]
                 val_f1 += losses["f1"]
 
                 #### <+++++++++++++++++++++++++++++++
 
-            wandb.log(
-                {
-                    "Validation loss": val_total_loss / (len(val_loader)) * b,
-                    "Validation iou": val_iou / (len(val_loader)) * b,
-                    "Validation accuracy": val_accuracy / (len(val_loader)) * b,
-                    "Validation f1": val_f1 / (len(val_loader)) * b,
-                }
-            )
+            if local_rank == 0:
+                wandb.log(
+                    {
+                        "Training loss": train_total_loss / (len(train_loader)) * b,
+                        "Training iou": train_iou / (len(train_loader)) * b,
+                        "Training f1": train_f1 / (len(train_loader)) * b,
+                        "Validation loss": val_total_loss / (len(val_loader)) * b,
+                        "Validation iou": val_iou / (len(val_loader)) * b,
+                        "Validation f1": val_f1 / (len(val_loader)) * b,
+                        "Epoch": e,
+                    }
+                )
+
+            # print(f"Validation loss: {val_total_loss / (len(val_loader)) * b}")
+            # print(f"Validation iou: {val_iou / (len(val_loader)) * b}")
+            # print(f"Validation f1: {val_f1 / (len(val_loader)) * b}")
 
             #######
             # break  #### <+++++++++++++++++++++++++++++++
 
     finally:
         if not para["debug"] and model.logger is not None and total_iter > 5000:
-            model.save(total_iter)
+            model.save(total_iter,e)
         # Clean up
         distributed.destroy_process_group()
 
