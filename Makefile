@@ -21,7 +21,7 @@ requirements: environment
 
 .PHONY: eval_davis
 eval_davis:
-	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS/2017' --output outputs/outputs_davis --model saves/checkpoint_davis_300000.pth
+	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS/2017' --output outputs/outputs_davis_p_0 --model /work3/s220493/saves/checkpoint_DAVIS_augmentation_p_0_37500.pth
 
 .PHONY: eval_davis_augmented
 eval_davis_augmented:
@@ -39,12 +39,12 @@ train_static:
 	
 .PHONY: train_davis
 train_davis:
-	CUDA_VISIBLE_DEVICES=0,1 OMP_NUM_THREADS=4 torchrun --nproc_per_node=1 train.py stage=2 davis_root='/work3/s220493/DAVIS' 
+	CUDA_VISIBLE_DEVICES=0,1 OMP_NUM_THREADS=4 torchrun --nnodes=1 --rdzv-endpoint=localhost:29501 --nproc_per_node=1 train.py stage=2 davis_root='/work3/s220493/DAVIS' 
 	
 	
 .PHONY: train_davis_augmented
 train_davis_augmented:
-	CUDA_VISIBLE_DEVICES=0,1 OMP_NUM_THREADS=4 torchrun --nproc_per_node=1 train.py --stage 2 --davis_root '/work3/s220493/DAVIS_Augmented' --exp_name davis_augmented --iterations 600000
+	CUDA_VISIBLE_DEVICES=0,1 OMP_NUM_THREADS=4 torchrun --nproc_per_node=2 train.py --stage 2 --davis_root '/work3/s220493/DAVIS_Augmented' --exp_name davis_augmented --iterations 600000
 	
 #--load_model './saves/checkpoint_static_checkpoint.pth'
 	
