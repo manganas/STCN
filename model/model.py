@@ -247,7 +247,7 @@ class STCNModel:
 
             return losses
 
-    def save(self, it):
+    def save(self, it, current_epoch):
         if self.save_path is None:
             print("Saving has been disabled.")
             return
@@ -257,9 +257,9 @@ class STCNModel:
         torch.save(self.STCN.module.state_dict(), model_path)
         print("Model saved to %s." % model_path)
 
-        self.save_checkpoint(it)
+        self.save_checkpoint(it, current_epoch)
 
-    def save_checkpoint(self, it):
+    def save_checkpoint(self, it, current_epoch):
         if self.save_path is None:
             print("Saving has been disabled.")
             return
@@ -271,6 +271,7 @@ class STCNModel:
             "network": self.STCN.module.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict(),
+            'current_epoch': current_epoch
         }
         torch.save(checkpoint, checkpoint_path)
 
