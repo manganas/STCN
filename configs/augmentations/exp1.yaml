@@ -1,18 +1,20 @@
-
 # Augmentation probability
-augmentation_p: 1
+augmentation_p: 0
 
 # Tranformations for new mask params
 
-# between -99 and 99
-scale_p: 0.5
-scale_factor_lim: 50
+# between 0.01 (small positive) and whatever
+scale_factor_lower_lim: 0.5
+scale_factor_upper_lim: 2
 
 # Translation
-translation_p: 0.5
-translation_lim: 0.5 # half of height and width
+translation_lim: 0.5 # half of height and width is the max to be added to the coords of each px
 
-# Horizontal flip
+# Horizontal flip probability
 horizontal_flip_p: 0.5
 
 
+# Augmentation options
+select_instances: False
+foreground_p: 1.0
+include_new_instances: False
