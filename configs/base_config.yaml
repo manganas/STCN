@@ -1,10 +1,16 @@
 # torchrun
 # nproc_per_node: 2
 
+### Logging in wandb
+# switch to False to debug and run interactively
+wandb_log: True
+
+
 # data paths
 static_root: "../static"
 bl_root: '../BL30K'
-yv_root: '../YouTube'
+yv_root: '/work3/s220493/YouTube'
+yv2018_root: '/work3/s220493/YouTube2018'
 davis_root: '/work3/s220493/DAVIS'
 
 # STCN
@@ -18,8 +24,8 @@ steps: [250000]
 # Training parameters
 num_workers: 8
 batch_size: 4
-iterations: 37500 # corresponds to 2.5k epochs. Use the next entry to set the number of epochs
-n_epochs: 2500
+iterations: 300000 # corresponds to 2.5k epochs. Use the next entry to set the number of epochs
+n_epochs: 1000
 gamma: 0.1
 lr: 0.00001
 
@@ -39,6 +45,9 @@ local-rank: 0
 save_model_path: '/work3/s220493/saves/'
 exp_name: 'davis'
 
+## Part of YoutubeVOS used
+## float from 0 to 1
+yt_vos_part: 0
 
 
 ### Augmentations

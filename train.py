@@ -26,9 +26,24 @@ import wandb
 from omegaconf import DictConfig, OmegaConf
 import hydra
 
+# import os
+
+
+## Unused yet!!!
+def set_random_seeds(random_seed=0):
+
+    torch.manual_seed(random_seed)
+    torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False # set in hydra
+    # np.random.seed(random_seed)# done
+    # random.seed(random_seed) # done
+
 
 @hydra.main(version_base=None, config_path="configs", config_name="base_config.yaml")
 def train(para):
+
+    ### Wandb logging!
+    wandb_log = para["wandb_log"]
 
     # print(OmegaConf.to_yaml(para))
 
@@ -59,6 +74,11 @@ def train(para):
     local_rank = torch.distributed.get_rank()
 
     world_size = torch.distributed.get_world_size()
+
+    # LOCAL_RANK = int(os.environ['LOCAL_RANK'])
+    # WORLD_SIZE = int(os.environ['WORLD_SIZE'])
+    # WORLD_RANK = int(os.environ['RANK'])
+
     torch.cuda.set_device(local_rank)
 
     print("I am rank %d in this world of size %d!" % (local_rank, world_size))
@@ -114,7 +134,7 @@ def train(para):
         print("Previously trained model loaded!")
     else:
         total_iter = 0
-        current_epoch=0
+        current_epoch = 0
 
     if para["load_network"] is not None:
         model.load_network(para["load_network"])
@@ -147,13 +167,14 @@ def train(para):
 
     def renew_vos_loader(max_skip):
         # //5 because we only have annotation for every five frames
-        # yv_dataset = VOSDataset(
-        #     path.join(yv_root, "JPEGImages"),
-        #     path.join(yv_root, "Annotations"),
-        #     max_skip // 5,
-        #     is_bl=False,
-        #     subset=load_sub_yv(),
-        # )
+        yv_dataset = VOSDataset(
+            path.join(yv_root, "JPEGImages"),
+            path.join(yv_root, "Annotations"),
+            max_skip // 5,
+            is_bl=False,
+            subset=load_sub_yv(),
+            para=para,
+        )
         subset_path = path.join(davis_root, "ImageSets", "2017", "train.txt")
         davis_dataset = VOSDataset(
             path.join(davis_root, "JPEGImages", "480p"),
@@ -163,7 +184,15 @@ def train(para):
             subset=load_sub_davis(subset_path),
             para=para,
         )
-        train_dataset = ConcatDataset([davis_dataset] * 1)  #  + [yv_dataset])
+
+        # split the yv dataset
+        used_size = int(para["yt_vos_part"] * len(yv_dataset))
+        unused_size = len(yv_dataset) - used_size
+        yv_dataset_part, _ = torch.utils.data.random_split(
+            yv_dataset, [used_size, unused_size]
+        )
+
+        train_dataset = ConcatDataset([davis_dataset] + [yv_dataset_part])
 
         # print("YouTube dataset size: ", len(yv_dataset))
         print("DAVIS dataset size: ", len(davis_dataset))
@@ -179,7 +208,9 @@ def train(para):
         #     path.join(yv_root, "Annotations"),
         #     max_skip // 5,
         #     is_bl=False,
-        #     subset=load_sub_yv(),
+        #     subset=load_sub_yv(yv_val_subset_path),
+        #     train=False,
+        #     para=para,
         # )
 
         subset_path = path.join(davis_root, "ImageSets", "2017", "val.txt")
@@ -192,7 +223,7 @@ def train(para):
             train=False,
             para=para,
         )
-        val_dataset = ConcatDataset([davis_dataset] * 1)  #  + [yv_dataset])
+        val_dataset = ConcatDataset([davis_dataset])  # + [yv_dataset])
 
         # print("YouTube dataset size: ", len(yv_dataset))
         print("DAVIS validation dataset size: ", len(davis_dataset))
@@ -265,7 +296,7 @@ def train(para):
         # stage 2 or 3
         increase_skip_fraction = [0.1, 0.2, 0.3, 0.4, 0.9, 1.0]
         # VOS dataset, 480p is used for both datasets
-        # yv_root = path.join(path.expanduser(para["yv_root"]), "train_480p")
+        yv_root = path.join(path.expanduser(para["yv_root"]), "train_480p")
         davis_root = path.join(path.expanduser(para["davis_root"]), "2017", "trainval")
 
         train_sampler, train_loader = renew_vos_loader(5)
@@ -283,7 +314,7 @@ def train(para):
     # total_epoch = math.ceil(para["iterations"] / len(train_loader))
     total_epoch = para["n_epochs"]
     # current_epoch = total_iter // len(train_loader)
-     
+
     print(
         "Number of training epochs (the last epoch might not complete): ", total_epoch
     )
@@ -297,7 +328,7 @@ def train(para):
 
     # WANDB Setup
     exp_name = para["exp_name"]
-    if local_rank == 0:
+    if wandb_log and local_rank == 0:
         wandb.init(
             # Set the project where this run will be logged
             project="thesis-STCN",
@@ -310,6 +341,8 @@ def train(para):
     print(f"Trainloader length: {len(train_loader)}, Iterations: {para['iterations']}")
 
     print(davis_root)
+
+    # ### Save image for debugging!
 
     # data, p = next(iter(train_loader))
 
@@ -390,7 +423,7 @@ def train(para):
 
                 #### <+++++++++++++++++++++++++++++++
 
-            if local_rank == 0:
+            if wandb_log and local_rank == 0:
                 wandb.log(
                     {
                         "Training loss": train_total_loss / (len(train_loader)) * b,
@@ -412,7 +445,7 @@ def train(para):
 
     finally:
         if not para["debug"] and model.logger is not None and total_iter > 5000:
-            model.save(total_iter,e)
+            model.save(total_iter, e)
         # Clean up
         distributed.destroy_process_group()
 

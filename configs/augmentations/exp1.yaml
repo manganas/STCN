@@ -1,5 +1,5 @@
 # Augmentation probability
-augmentation_p: 0
+augmentation_p: 0.75
 
 # Tranformations for new mask params
 
@@ -8,7 +8,7 @@ scale_factor_lower_lim: 0.5
 scale_factor_upper_lim: 2
 
 # Translation
-translation_lim: 0.5 # half of height and width is the max to be added to the coords of each px
+translation_lim: 0.125 # half of height and width is the max to be added to the coords of each px
 
 # Horizontal flip probability
 horizontal_flip_p: 0.5
@@ -16,5 +16,17 @@ horizontal_flip_p: 0.5
 
 # Augmentation options
 select_instances: False
+# foreground probability: set to 1, the new mask is always in foreground, occluding original mask
 foreground_p: 1.0
 include_new_instances: False
+
+# Use a third frame probability
+# Happens only when the first augmentation happens, with prob augmentation_p
+# If augmentation and p>=third_frame_p, then 3d frame is used
+third_frame_p: 1.0
+
+##########
+
+# Apply further transformations, from STCN
+apply_transf_p: 1.0
+
