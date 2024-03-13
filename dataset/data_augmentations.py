@@ -17,7 +17,7 @@ class VOSTransformations:
         Resizes the image and crops the center part, sot that resulthas the same dims as input
         Scale is percentage increase or decrease: -0.99 -> 99% decrease in original dims
         """
-        
+
         s = kwargs["scale_factor"]
         if s < 0.1:
             s = 0.1
@@ -41,7 +41,6 @@ class VOSTransformations:
         mask = mask.crop((left, top, right, bottom))
 
         return frame, mask
-
 
     def random_horizontal_flip(p_horizontal_flip: float):
         def random_horizontal_flip_wrapper(
@@ -73,7 +72,6 @@ class VOSTransformations:
         )
 
 
-
 class VOSAugmentations:
 
     def __init__(
@@ -81,86 +79,95 @@ class VOSAugmentations:
         select_instances: bool,
         foreground_p: float,
         include_new_instances: bool,
-        ):
-        '''
+        max_n_classes_per_frame: int = 6,
+        seed: int = 123,
+    ) -> None:
+        """
         foreground_p: probability that the augmentation mask is in the foreground, occluding the original mask.
         include_new_instances: If True, the selected instances in the augmentation mask will be included in the final mask
         select_instances: if True, in the case the augmentation maks has more than one instances, all or a subset of those will
                         be included in the augmentation to be applied.
-        '''
-        
-        
+        """
+
         self.select_instances = select_instances
-        
-        if foreground_p >1.0:
+
+        if foreground_p > 1.0:
             self.foreground_p = 1.0
         elif foreground_p < 0.0:
             self.foreground_p = 0.0
         else:
             self.foreground_p = foreground_p
-        
+
         self.include_new_instances = include_new_instances
 
-    
+        self.max_n_classes_per_frame = max_n_classes_per_frame
+        self.__chosen_instances = None
+        self.__seed = seed
+
+        print(f"Select instances: {self.select_instances}")
+        print(f"Foreground probability: {self.foreground_p}")
+        print(f"Include_new_instances: {self.include_new_instances}")
+
+    def reset_chosen_instances(self) -> None:
+        self.__chosen_instances = None
+        self.max_n_classes_per_frame = 6
+
+    def set_seed(self, seed: int) -> None:
+        self.__seed = seed
 
     def apply_transformations(
         self,
         frame: Image.Image,
         mask: Image.Image,
         transformations_list: list = [],
-        **kwargs
+        **kwargs,
     ) -> tuple[Image.Image]:
         for transform in transformations_list:
             frame, mask = transform(frame, mask, **kwargs)
 
         return frame, mask
-    
-    
-    def select_mask_instances(self,mask_p: ArrayLike) -> ArrayLike:
-        discrete_inst = np.unique(mask_p)[1:]  # the 1st element is 0
-        try:
-            n_inst = np.random.randint(low=1, high=len(discrete_inst) + 1)
-        except ValueError:
-            return mask_p
-        chosen_instances = np.random.choice(discrete_inst, size=n_inst, replace=False)
+
+    def select_mask_instances(self, mask_p: ArrayLike) -> ArrayLike:
+        if self.__chosen_instances is None:
+            np.random.seed(self.__seed)
+            discrete_inst = np.unique(mask_p)[1:]  # the 1st element is 0
+            try:
+                n_inst = np.random.randint(low=1, high=len(discrete_inst) + 1)
+            except ValueError:
+                return mask_p
+            chosen_instances = np.random.choice(
+                discrete_inst, size=n_inst, replace=False
+            )
+            self.__chosen_instances = chosen_instances
+        else:
+            chosen_instances = self.__chosen_instances
+
         tmp_new_mask_p = np.zeros_like(mask_p)
         for i in sorted(chosen_instances):
             tmp_new_mask_p[mask_p == i] = i
 
         return tmp_new_mask_p
-    
-    
-    def get_new_mask_values(self,mask_og_p: ArrayLike, mask_new_p: ArrayLike) -> ArrayLike:
+
+    def get_new_mask_values(
+        self, mask_og_p: ArrayLike, mask_new_p: ArrayLike
+    ) -> ArrayLike:
         """
         Assumption: The original mask is always in ordered form
         like [0,1,2,3,4]...
         This is the case when I first open the original mask as 'P' in PIL
         """
 
-        og_mask_vals = np.unique(mask_og_p)
-        new_mask_vals = np.unique(mask_new_p)
+        # og_mask_vals = np.unique(mask_og_p)
+        new_mask_vals = np.unique(mask_new_p)[1:]  # ignore the background
 
-        new_vals = np.zeros((len(og_mask_vals) + len(new_mask_vals) - 1))
-        new_vals[0 : len(og_mask_vals)] = og_mask_vals
-
-        ptr = len(og_mask_vals)
-        for i in new_mask_vals[1:]:
-            if i in new_vals:
-                new_vals[ptr] = new_vals.max() + 1
-            else:
-                new_vals[ptr] = i
-            ptr += 1
-
-        # The same as the mask for augmentation, but
-        # with changed values for the instances in case they were
         new_mask_copy = mask_new_p.copy()
 
-        for i, el in enumerate(new_mask_vals[1:]):
-            new_mask_copy[mask_new_p == el] = new_vals[len(og_mask_vals) + i]
+        for i, el in enumerate(new_mask_vals):
+            new_mask_copy[mask_new_p == el] = (
+                new_mask_vals[i] + self.max_n_classes_per_frame
+            )
 
         return new_mask_copy
-
-
 
     def overlay_frames_masks(
         self,
@@ -189,7 +196,7 @@ class VOSAugmentations:
         mask_augm = mask_og_p.copy()
 
         # back or foreground
-        foreground = (np.random.rand() >= self.foreground_p)
+        foreground = np.random.rand() >= self.foreground_p
         if foreground:
             frame_augm[mask_new_p > 0] = frame_new[mask_new_p > 0]
             if self.include_new_instances:
@@ -223,7 +230,7 @@ class VOSAugmentations:
         augm_frame: Image.Image,
         augm_mask: Image.Image,
         transformations_list: list,
-        **kwargs
+        **kwargs,
     ) -> tuple[Image.Image]:
 
         resize_w, resize_h = kwargs["resize_w"], kwargs["resize_h"]
@@ -240,30 +247,7 @@ class VOSAugmentations:
         )
 
         frame_augm, mask_augm = self.overlay_frames_masks(
-                frame_og,
-                mask_og,
-                frame_new,
-                mask_new_p,
-                select_instances=self.select_instances,
-                foreground=self.foreground,
-                include_new_instances=self.include_new_instances,
-            )
-
-        # # Convert to numpy arrays
-        # frame_og = np.asarray(frame_og)
-        # mask_og = np.asarray(mask_og)
-        # frame_new = np.asarray(frame_new)
-        # mask_new_p = np.asarray(mask_new_p)
-
-        # # Overlay mask of frame 2 on 1
-        # frame_augm = frame_og.copy()
-        # mask_augm = mask_og.copy()
-
-        # frame_augm[mask_new_p > 0] = frame_new[mask_new_p > 0]
-        # mask_augm[mask_new_p > 0] = 0
-
-        # # save frames and masks
-        # frame_augm = Image.fromarray(frame_augm)
-        # mask_augm = Image.fromarray(mask_augm)
+            frame_og, mask_og, frame_new, mask_new_p
+        )
 
         return frame_augm, mask_augm

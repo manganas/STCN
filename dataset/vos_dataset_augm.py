@@ -162,6 +162,7 @@ class VOSDataset(Dataset):
         augmentation_params = para["augmentations"]
 
         self.p_augm = augmentation_params["augmentation_p"]
+        self.third_frame_p = augmentation_params["third_frame_p"]
         print(f"Augmentation p: {self.p_augm}")
 
         p_horizontal_flip = augmentation_params["horizontal_flip_p"]
@@ -172,9 +173,9 @@ class VOSDataset(Dataset):
         self.translation_lim = augmentation_params["translation_lim"]
 
         self.vos_augmentations = VOSAugmentations(
-            select_instances=augmentation_params['select_instances'],
-            foreground=augmentation_params['foreground_p'],
-            include_new_instances=augmentation_params['include_new_instances'],
+            select_instances=augmentation_params["select_instances"],
+            foreground_p=augmentation_params["foreground_p"],
+            include_new_instances=augmentation_params["include_new_instances"],
         )
 
         self.transformations_list = [
@@ -183,67 +184,126 @@ class VOSDataset(Dataset):
             VOSTransformations.random_translation,
         ]
 
+        print(
+            f"Augmentations, scaling: upper={self.scale_factor_upper_lim}, lower={self.scale_factor_lower_lim}"
+        )
+        print(f"Augmentations, translation: limit ratio={self.translation_lim}")
+        print(f"Augmentations, horizontal flip prob: {p_horizontal_flip}")
+
+    def get_vid_frames_paths(self, idx: int) -> list:
+        video = self.videos[idx]
+        vid_im_path = path.join(self.im_root, video)
+        vid_gt_path = path.join(self.gt_root, video)
+        frames = self.frames[video]
+        return vid_im_path, vid_gt_path, frames
+
+    def get_frames_indices(self, frames: list) -> list[int]:
+        this_max_jump = min(len(frames), self.max_jump)
+        start_idx = np.random.randint(len(frames) - this_max_jump + 1)
+        f1_idx = start_idx + np.random.randint(this_max_jump + 1) + 1
+        f1_idx = min(f1_idx, len(frames) - this_max_jump, len(frames) - 1)
+
+        f2_idx = f1_idx + np.random.randint(this_max_jump + 1) + 1
+        f2_idx = min(f2_idx, len(frames) - this_max_jump // 2, len(frames) - 1)
+
+        frames_idx = [start_idx, f1_idx, f2_idx]
+        return frames_idx
+
+    def augment_image(
+        self, original_im, original_gt, new_im, new_gt
+    ) -> tuple[Image.Image, Image.Image]:
+        # Transforms to be applied to the new mask
+        horizontal_p = np.random.rand()
+
+        scale_factor = np.random.uniform(
+            low=self.scale_factor_lower_lim,
+            high=self.scale_factor_upper_lim,
+        )
+
+        translation_w_lim, translation_h_lim = 0, 0
+        if self.translation_lim > 0:
+            translation_w_lim = np.random.randint(
+                low=-int(self.resize_w * self.translation_lim),
+                high=int(self.resize_w * self.translation_lim),
+            )
+
+            translation_h_lim = np.random.randint(
+                low=-int(self.resize_h * self.translation_lim),
+                high=int(self.resize_h * self.translation_lim),
+            )
+
+        transformation_options = {
+            "resize_w": self.resize_w,
+            "resize_h": self.resize_h,
+            "translation": (translation_w_lim, translation_h_lim),
+            "horizontal_p": horizontal_p,
+            "scale_factor": scale_factor,
+        }
+
+        this_im, this_gt = self.vos_augmentations.get_augmented_data_per_frame(
+            original_im,
+            original_gt,
+            new_im,
+            new_gt,
+            self.transformations_list,
+            **transformation_options,
+        )
+
+        return this_im, this_gt
+
     def __get_data__(self, idx):
         video = self.videos[idx]
         info = {}
         info["name"] = video
 
-        vid_im_path = path.join(self.im_root, video)
-        vid_gt_path = path.join(self.gt_root, video)
-        frames = self.frames[video]
+        vid_im_path, vid_gt_path, frames = self.get_vid_frames_paths(idx)
 
         augment = False
+        augment_more = False
         if self.train and np.random.rand() < self.p_augm:
             augment = True
             j = np.random.randint(low=0, high=len(self.videos))
-            augm_video = self.videos[j]
-            augm_vid_im_path = path.join(self.im_root, augm_video)
-            augm_vid_gt_path = path.join(self.gt_root, augm_video)
-            augm_frames = self.frames[augm_video]
+            augm_vid_im_path, augm_vid_gt_path, augm_frames = self.get_vid_frames_paths(
+                j
+            )
 
-        # if augment:
-        #     print("Augment")
-        # else:
-        #     print("Not augment")
+            if np.random.rand() < self.third_frame_p:
+                augment_more = True
+                self.vos_augmentations.max_n_classes_per_frame = 12  # if include
+                k = np.random.randint(low=0, high=len(self.videos))
+                augm_vid_im_path_3, augm_vid_gt_path_3, augm_frames_3 = (
+                    self.get_vid_frames_paths(k)
+                )
+
+            self.vos_augmentations.reset_chosen_instances()
+            self.vos_augmentations.set_seed(100 * idx)  # if include
 
         trials = 0
         while trials < 5:
             info["frames"] = []  # Appended with actual frames
-
             # Don't want to bias towards beginning/end
-            this_max_jump = min(len(frames), self.max_jump)
-            start_idx = np.random.randint(len(frames) - this_max_jump + 1)
-            f1_idx = start_idx + np.random.randint(this_max_jump + 1) + 1
-            f1_idx = min(f1_idx, len(frames) - this_max_jump, len(frames) - 1)
+            frames_idx = self.get_frames_indices(frames)
 
-            f2_idx = f1_idx + np.random.randint(this_max_jump + 1) + 1
-            f2_idx = min(f2_idx, len(frames) - this_max_jump // 2, len(frames) - 1)
-
-            frames_idx = [start_idx, f1_idx, f2_idx]
-
+            # This random reversal can be included inside the get_frames_indices to avoid repeating
             if np.random.rand() < 0.5:
                 # Reverse time
                 frames_idx = frames_idx[::-1]
 
             ## Augmentation jumps
+            ## Augmentation 1
             if augment:
-                this_max_jump = min(len(augm_frames), self.max_jump)
-                start_idx = np.random.randint(len(augm_frames) - this_max_jump + 1)
-                f1_idx = start_idx + np.random.randint(this_max_jump + 1) + 1
-                f1_idx = min(
-                    f1_idx, len(augm_frames) - this_max_jump, len(augm_frames) - 1
-                )
-
-                f2_idx = f1_idx + np.random.randint(this_max_jump + 1) + 1
-                f2_idx = min(
-                    f2_idx, len(augm_frames) - this_max_jump // 2, len(augm_frames) - 1
-                )
-
-                augm_frames_idx = [start_idx, f1_idx, f2_idx]
+                augm_frames_idx = self.get_frames_indices(augm_frames)
 
                 if np.random.rand() < 0.5:
                     # Reverse time
                     augm_frames_idx = augm_frames_idx[::-1]
+
+                ## Augmentation 2
+                if augment_more:
+                    augm_frames_idx_3 = self.get_frames_indices(augm_frames_3)
+                    if np.random.rand() < 0.5:
+                        # Reverse time
+                        augm_frames_idx_3 = augm_frames_idx_3[::-1]
 
             sequence_seed = np.random.randint(2147483647)
             images = []
@@ -273,42 +333,26 @@ class VOSDataset(Dataset):
                         path.join(augm_vid_gt_path, augm_png_name)
                     ).convert("P")
 
-                    # Transforms to be applied to the new mask
-                    horizontal_p = np.random.rand()
-
-                    scale_factor = np.random.uniform(
-                        low=self.scale_factor_lower_lim,
-                        high=self.scale_factor_upper_lim,
+                    this_im, this_gt = self.augment_image(
+                        this_im, this_gt, that_im, that_gt
                     )
 
-                    translation_w_lim = np.random.randint(
-                        low=-int(self.resize_w * self.translation_lim),
-                        high=int(self.resize_w * self.translation_lim),
-                    )
+                    if augment_more:
+                        augm_f_idx = augm_frames_idx_3[i]
+                        augm_jpg_name = augm_frames_3[augm_f_idx][:-4] + ".jpg"
+                        augm_png_name = augm_frames_3[augm_f_idx][:-4] + ".png"
 
-                    translation_h_lim = np.random.randint(
-                        low=-int(self.resize_h * self.translation_lim),
-                        high=int(self.resize_h * self.translation_lim),
-                    )
+                        that_im = Image.open(
+                            path.join(augm_vid_im_path_3, augm_jpg_name)
+                        ).convert("RGB")
 
-                    transformation_options = {
-                        "resize_w": self.resize_w,
-                        "resize_h": self.resize_h,
-                        "translation": (translation_w_lim, translation_h_lim),
-                        "horizontal_p": horizontal_p,
-                        "scale_factor": scale_factor,
-                    }
+                        that_gt = Image.open(
+                            path.join(augm_vid_gt_path_3, augm_png_name)
+                        ).convert("P")
 
-                    this_im, this_gt = (
-                        self.vos_augmentations.get_augmented_data_per_frame(
-                            this_im,
-                            this_gt,
-                            that_im,
-                            that_gt,
-                            self.transformations_list,
-                            **transformation_options,
+                        this_im, this_gt = self.augment_image(
+                            this_im, this_gt, that_im, that_gt
                         )
-                    )
 
                 reseed(sequence_seed)
                 this_im = self.all_im_dual_transform(this_im)
@@ -401,22 +445,6 @@ class VOSDataset(Dataset):
         """
 
         data = self.__get_data__(idx)
-
-        # # Get another video, if p>0.5
-        # seed = np.random.randint(2147483647)
-        # reseed(seed)
-        # p = np.random.rand()
-        # if p >= 0.5:
-        #     j = np.random.randint(low=0, high=len(self.videos))
-
-        #     new_data = self.__get_data__(j)
-
-        #     data = VOSAugmentations.get_augmented_data(data, new_data, [])
-
-        ## Idea: Propta fortono kai augment eikones, san PIL.Image
-        # Meta kano ola ta alla gia augmented mask aki frames: dual transf etc..
-        # poy edo ta kanei otan travaei ta dedomena.
-        # Ligi prosoxi an tha allaksei to selector, alla vlepoyme
 
         return data
 
