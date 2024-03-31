@@ -10,6 +10,9 @@ import torch.distributed as distributed
 
 from model.model import STCNModel
 from dataset.static_dataset import StaticTransformDataset
+from dataset.davis_online_validation_dataset import DAVISTestDataset
+
+from eval_davis_online import online_davis_eval
 
 # from dataset.vos_dataset import VOSDataset
 
@@ -129,9 +132,15 @@ def train(para):
 
     # Load pertrained model if needed
     if para["load_model"] is not None:
-        total_iter = model.load_model(para["load_model"])
-        current_epoch = model.load_model(para["current_epoch"])
-        print("Previously trained model loaded!")
+        try:
+            total_iter = model.load_model(para["load_model"])
+            current_epoch = model.load_model(para["current_epoch"])
+            print("Previously trained model loaded!")
+        except FileNotFoundError as e:
+            print(e)
+            total_iter = 0
+            current_epoch = 0
+            print("Input checkpoint model not found. Starting from scratch")
     else:
         total_iter = 0
         current_epoch = 0
@@ -185,6 +194,13 @@ def train(para):
             para=para,
         )
 
+        # split the davis dataset
+        used_size = int(para["davis_part"] * len(davis_dataset))
+        unused_size = len(davis_dataset) - used_size
+        davis_dataset_part, _ = torch.utils.data.random_split(
+            davis_dataset, [used_size, unused_size]
+        )
+
         # split the yv dataset
         used_size = int(para["yt_vos_part"] * len(yv_dataset))
         unused_size = len(yv_dataset) - used_size
@@ -192,10 +208,10 @@ def train(para):
             yv_dataset, [used_size, unused_size]
         )
 
-        train_dataset = ConcatDataset([davis_dataset] + [yv_dataset_part])
+        train_dataset = ConcatDataset([davis_dataset_part] + [yv_dataset_part])
 
         # print("YouTube dataset size: ", len(yv_dataset))
-        print("DAVIS dataset size: ", len(davis_dataset))
+        print("DAVIS dataset size: ", len(davis_dataset_part))
         print("Concat dataset size: ", len(train_dataset))
         print("Renewed with skip: ", max_skip)
 
@@ -326,6 +342,14 @@ def train(para):
             increase_skip_epoch[:-1],
         )
 
+    # Online evaluation related
+    steps = 5
+    online_eval_dataset = DAVISTestDataset(davis_root, steps=steps)
+    online_eval_loader = DataLoader(
+        online_eval_dataset, batch_size=1, shuffle=False, num_workers=4
+    )
+    gt_annotations_path = path.join(davis_root, "Annotations", "480p")
+
     # WANDB Setup
     exp_name = para["exp_name"]
     if wandb_log and local_rank == 0:
@@ -342,19 +366,19 @@ def train(para):
 
     print(davis_root)
 
-    # ### Save image for debugging!
+    ### Save image for debugging!
 
-    # data, p = next(iter(train_loader))
+    # data = next(iter(train_loader))
 
-    # for j, p_ in enumerate(p):
-    #     if p_:
-    #         for i in range(3):
-    #             plot_frame_of_batch(
-    #                 data,
-    #                 frame_number=i,
-    #                 batch_element=j,
-    #                 name=f"frame_content_b{j}_frame{i}.png",
-    #             )
+    # for j in range(para["batch_size"]):
+
+    #     for i in range(3):
+    #         plot_frame_of_batch(
+    #             data,
+    #             frame_number=i,
+    #             batch_element=j,
+    #             name=f"frame_content_b{j}_frame{i}.png",
+    #         )
 
     # print("Done!")
     # exit()
@@ -362,6 +386,8 @@ def train(para):
     """
     Starts training
     """
+    best_val_iou = -1
+    best_j_mean = -1
     # Need this to select random bases in different workers
     np.random.seed(np.random.randint(2**30 - 1) + local_rank * 100)
     try:
@@ -385,7 +411,7 @@ def train(para):
 
             model.train()
             for data in train_loader:
-                losses = model.do_pass(data, total_iter)
+                losses = model.do_pass(data, total_iter, e)
 
                 # Log metrics
                 b, s, _, _, _ = data["gt"].shape
@@ -412,7 +438,7 @@ def train(para):
             model.val()
             for data in val_loader:
                 with torch.no_grad():
-                    losses = model.do_pass(data, total_iter)
+                    losses = model.do_pass(data, total_iter, e)
 
                 # Log metrics
                 b, s, _, _, _ = data["gt"].shape
@@ -421,24 +447,35 @@ def train(para):
                 val_iou += losses["iou"]
                 val_f1 += losses["f1"]
 
-                #### <+++++++++++++++++++++++++++++++
+                # run davis validation iou for every 5th frame or part of videos
+
+            ious_mean, fs_mean = online_davis_eval(
+                online_eval_loader, model.STCN.module, gt_annotations_path
+            )
+
+            final_mean = (ious_mean + fs_mean) / 2.0
+
+            #### <+++++++++++++++++++++++++++++++
 
             if wandb_log and local_rank == 0:
                 wandb.log(
                     {
-                        "Training loss": train_total_loss / (len(train_loader)) * b,
-                        "Training iou": train_iou / (len(train_loader)) * b,
-                        "Training f1": train_f1 / (len(train_loader)) * b,
-                        "Validation loss": val_total_loss / (len(val_loader)) * b,
-                        "Validation iou": val_iou / (len(val_loader)) * b,
-                        "Validation f1": val_f1 / (len(val_loader)) * b,
+                        "Training loss": train_total_loss / (len(train_loader)),
+                        "Training iou": train_iou / (len(train_loader)),
+                        "Training f1": train_f1 / (len(train_loader)),
+                        "Validation loss": val_total_loss / (len(val_loader)),
+                        "Validation iou": val_iou / (len(val_loader)),
+                        "Validation f1": val_f1 / (len(val_loader)),
                         "Epoch": e,
+                        "J mean": ious_mean,
+                        "J&F mean": final_mean,
                     }
                 )
 
-            # print(f"Validation loss: {val_total_loss / (len(val_loader)) * b}")
-            # print(f"Validation iou: {val_iou / (len(val_loader)) * b}")
-            # print(f"Validation f1: {val_f1 / (len(val_loader)) * b}")
+            if local_rank == 0 and ious_mean > best_j_mean:
+                best_j_mean = ious_mean
+                model.save_best_model(exp_name)
+                print(f"saved best model with val iou: {ious_mean}")
 
             #######
             # break  #### <+++++++++++++++++++++++++++++++

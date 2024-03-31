@@ -63,7 +63,7 @@ class STCNModel:
         if para["debug"]:
             self.report_interval = self.save_im_interval = 1
 
-    def do_pass(self, data, it=0):
+    def do_pass(self, data, it=0, current_epoch=0):
         # No need to store the gradient outside training
         torch.set_grad_enabled(self._is_train)
 
@@ -223,7 +223,8 @@ class STCNModel:
 
                 if it % self.save_model_interval == 0 and it != 0:
                     if self.logger is not None:
-                        self.save(it)
+                        # self.save(it, current_epoch)
+                        self.save_checkpoint(it, current_epoch=current_epoch)
 
             # Backward pass
             # This should be done outside autocast
@@ -259,6 +260,16 @@ class STCNModel:
 
         self.save_checkpoint(it, current_epoch)
 
+    def save_best_model(self, exp_name: str):
+        if self.save_path is None:
+            print("Saving has been disabled.")
+            return
+
+        os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
+        model_path = self.save_path + (f"_{exp_name}_best.pth")
+        torch.save(self.STCN.module.state_dict(), model_path)
+        print("Model saved to %s." % model_path)
+
     def save_checkpoint(self, it, current_epoch):
         if self.save_path is None:
             print("Saving has been disabled.")
@@ -271,7 +282,7 @@ class STCNModel:
             "network": self.STCN.module.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict(),
-            'current_epoch': current_epoch
+            "current_epoch": current_epoch,
         }
         torch.save(checkpoint, checkpoint_path)
 

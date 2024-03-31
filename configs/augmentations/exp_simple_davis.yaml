@@ -1,5 +1,5 @@
 # Augmentation probability
-augmentation_p: 0.75
+augmentation_p: 0.0
 
 # Tranformations for new mask params
 
@@ -17,8 +17,8 @@ horizontal_flip_p: 0.5
 # Augmentation options
 select_instances: True
 # foreground probability: set to 1, the new mask is always in foreground, occluding original mask
-foreground_p: 0.5
-include_new_instances: True
+foreground_p: 1.0
+include_new_instances: False
 
 # Use a third frame probability
 # Happens only when the first augmentation happens, with prob augmentation_p

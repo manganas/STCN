@@ -1,7 +1,7 @@
 #!/bin/sh
-#BSUB -q gpuv100
+#BSUB -q gpua100
 #BSUB -gpu "num=2:mode=exclusive_process"
-#BSUB -J myJob
+#BSUB -J davis_augmented_disk
 #BSUB -n 8
 #BSUB -W 12:00
 #BSUB -R "span[hosts=1]"
@@ -23,4 +23,7 @@ davis_dataset='_Augmented'
 # exp_simple_davis or exp1
 augmentations=exp_simple_davis
 davis_root="/work3/s220493/DAVIS$davis_dataset"
-torchrun --nproc_per_node=2 --nnodes=1 --rdzv-endpoint=localhost:29500 train.py exp_name="DAVIS_$davis_dataset-$augmentations-$n_epochs" n_epochs=$n_epochs augmentations=$augmentations davis_root=$davis_root
+torchrun --nproc_per_node=2 --standalone train.py exp_name="DAVIS_$davis_dataset-$augmentations-$n_epochs"\
+ n_epochs=$n_epochs augmentations=$augmentations\
+ davis_root=$davis_root \
+ save_model_path='/work3/s220493/saves/mean_exps/'

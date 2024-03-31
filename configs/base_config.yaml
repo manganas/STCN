@@ -23,7 +23,7 @@ steps: [250000]
 
 # Training parameters
 num_workers: 8
-batch_size: 4
+batch_size: 8
 iterations: 300000 # corresponds to 2.5k epochs. Use the next entry to set the number of epochs
 n_epochs: 1000
 gamma: 0.1
@@ -47,6 +47,7 @@ exp_name: 'davis'
 
 ## Part of YoutubeVOS used
 ## float from 0 to 1
+davis_part: 1
 yt_vos_part: 0
 
 

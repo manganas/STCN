@@ -89,7 +89,6 @@ class VOSAugmentations:
                         be included in the augmentation to be applied.
         """
 
-        self.select_instances = select_instances
 
         if foreground_p > 1.0:
             self.foreground_p = 1.0
@@ -98,6 +97,7 @@ class VOSAugmentations:
         else:
             self.foreground_p = foreground_p
 
+        self.select_instances = select_instances
         self.include_new_instances = include_new_instances
 
         self.max_n_classes_per_frame = max_n_classes_per_frame
@@ -133,6 +133,7 @@ class VOSAugmentations:
             discrete_inst = np.unique(mask_p)[1:]  # the 1st element is 0
             try:
                 n_inst = np.random.randint(low=1, high=len(discrete_inst) + 1)
+                n_inst = 1 # modification after meeting of 13/3/2024
             except ValueError:
                 return mask_p
             chosen_instances = np.random.choice(
