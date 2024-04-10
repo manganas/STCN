@@ -8,6 +8,39 @@ import numpy as np
 from pathlib import Path
 
 
+def get_n_successive_augm(prob_lists: list[float]) -> list[int]:
+
+    out_list = []
+
+    for i in range(len(prob_lists)):
+        a = np.random.rand()
+        if a < prob_lists[i]:
+            if i == 0 or i - 1 in out_list:
+                out_list.append(i)
+            else:
+                break
+
+    return out_list
+
+
+def calculate_nested_probabilities(augm_probs: list[float]) -> list[float]:
+    cumprob = []
+    result = []
+    augm_probs = sorted(augm_probs, reverse=True)
+    for i in range(len(augm_probs)):
+        if i == 0:
+            cumprob.append(augm_probs[i])
+            result.append(augm_probs[i])
+            continue
+
+        res = augm_probs[i] / cumprob[i - 1]
+
+        result.append(res)
+        cumprob.append(cumprob[i - 1] * res)
+
+    return result
+
+
 class VOSTransformations:
 
     def random_scale(
@@ -89,7 +122,6 @@ class VOSAugmentations:
                         be included in the augmentation to be applied.
         """
 
-
         if foreground_p > 1.0:
             self.foreground_p = 1.0
         elif foreground_p < 0.0:
@@ -103,6 +135,8 @@ class VOSAugmentations:
         self.max_n_classes_per_frame = max_n_classes_per_frame
         self.__chosen_instances = None
         self.__seed = seed
+
+        self._in_foreground = np.random.rand() >= self.foreground_p
 
         print(f"Select instances: {self.select_instances}")
         print(f"Foreground probability: {self.foreground_p}")
@@ -133,7 +167,7 @@ class VOSAugmentations:
             discrete_inst = np.unique(mask_p)[1:]  # the 1st element is 0
             try:
                 n_inst = np.random.randint(low=1, high=len(discrete_inst) + 1)
-                n_inst = 1 # modification after meeting of 13/3/2024
+                n_inst = 1  # modification after meeting of 13/3/2024
             except ValueError:
                 return mask_p
             chosen_instances = np.random.choice(
@@ -146,6 +180,9 @@ class VOSAugmentations:
         tmp_new_mask_p = np.zeros_like(mask_p)
         for i in sorted(chosen_instances):
             tmp_new_mask_p[mask_p == i] = i
+
+            # Modif after meeting
+            break
 
         return tmp_new_mask_p
 
@@ -191,14 +228,14 @@ class VOSAugmentations:
         # Include new mask objects
         if self.include_new_instances:
             new_mask__ = self.get_new_mask_values(mask_og_p, mask_new_p)
+            # augmentation_mask_empty = 1 if len(np.where(new_mask__ > 0)[0]) < 50 else 0
 
         # Overlay mask of frame 2 on 1
         frame_augm = frame_og.copy()
         mask_augm = mask_og_p.copy()
 
         # back or foreground
-        foreground = np.random.rand() >= self.foreground_p
-        if foreground:
+        if self._in_foreground:
             frame_augm[mask_new_p > 0] = frame_new[mask_new_p > 0]
             if self.include_new_instances:
                 mask_augm[new_mask__ > 0] = new_mask__[new_mask__ > 0]

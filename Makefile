@@ -21,7 +21,7 @@ requirements: environment
 
 .PHONY: eval_davis
 eval_davis:
-	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS/2017' --output outputs/outputs_davis_7k --model /work3/s220493/saves/mean_exps/checkpoint_DAVIS_-exp_simple_davis-7000DAVIS_-exp_simple_davis-7000_best.pth
+	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS/2017' --output outputs/various_sizes_datasets/outputs_augm_davis_1_yv_0.155 --model /work3/s220493/saves/various_sizes_datasets/checkpoint_DAVIS-0.75-davis-1-yv-0.155_111000.pth
 
 .PHONY: eval_davis_augmented
 eval_davis_augmented:
@@ -39,7 +39,7 @@ train_static:
 	
 .PHONY: train_davis
 train_davis:
-	CUDA_VISIBLE_DEVICES=2 OMP_NUM_THREADS=4 torchrun --nnodes=1 --rdzv-endpoint=localhost:29501 --nproc_per_node=1 train.py stage=2 davis_root='/work3/s220493/DAVIS' wandb_log=False augmentations=exp1
+	CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 torchrun --nnodes=1 --rdzv-endpoint=localhost:29501 --nproc_per_node=1 train.py stage=2 davis_root='/work3/s220493/DAVIS' wandb_log=False augmentations=exp2
 	
 	
 .PHONY: train_davis_augmented

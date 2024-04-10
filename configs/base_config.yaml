@@ -12,6 +12,8 @@ bl_root: '../BL30K'
 yv_root: '/work3/s220493/YouTube'
 yv2018_root: '/work3/s220493/YouTube2018'
 davis_root: '/work3/s220493/DAVIS'
+coco_root: '/work3/s220493/coco'
+
 
 # STCN
 benchmark: True
@@ -53,4 +55,4 @@ yt_vos_part: 0
 
 ### Augmentations
 defaults:
-    - augmentations: exp1
+    - augmentations: exp2

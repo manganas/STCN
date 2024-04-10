@@ -1,5 +1,5 @@
 # Augmentation probability
-augmentation_p: 1
+augmentation_p: [0.75, 0.5, 0.25]
 
 # Use COCO
 use_coco: False

@@ -15,8 +15,9 @@ from dataset.davis_online_validation_dataset import DAVISTestDataset
 from eval_davis_online import online_davis_eval
 
 # from dataset.vos_dataset import VOSDataset
+# from dataset.vos_dataset_augm import VOSDataset
 
-from dataset.vos_dataset_augm import VOSDataset
+from dataset.vos_dataset_augm_multi import VOSDataset
 from util.plotting_utils import plot_frame_of_batch
 
 from util.logger import TensorboardLogger
@@ -380,6 +381,7 @@ def train(para):
     #             name=f"frame_content_b{j}_frame{i}.png",
     #         )
 
+
     # print("Done!")
     # exit()
 
@@ -388,6 +390,7 @@ def train(para):
     """
     best_val_iou = -1
     best_j_mean = -1
+
     # Need this to select random bases in different workers
     np.random.seed(np.random.randint(2**30 - 1) + local_rank * 100)
     try:
@@ -411,6 +414,7 @@ def train(para):
 
             model.train()
             for data in train_loader:
+
                 losses = model.do_pass(data, total_iter, e)
 
                 # Log metrics
@@ -449,33 +453,42 @@ def train(para):
 
                 # run davis validation iou for every 5th frame or part of videos
 
-            ious_mean, fs_mean = online_davis_eval(
-                online_eval_loader, model.STCN.module, gt_annotations_path
-            )
+            if e % 100 == 0:
+                ious_mean, fs_mean = online_davis_eval(
+                    online_eval_loader, model.STCN.module, gt_annotations_path
+                )
 
-            final_mean = (ious_mean + fs_mean) / 2.0
+                final_mean = (ious_mean + fs_mean) / 2.0
 
             #### <+++++++++++++++++++++++++++++++
 
-            if wandb_log and local_rank == 0:
+            if wandb_log and local_rank == 0 and e % 100 == 0:
                 wandb.log(
                     {
                         "Training loss": train_total_loss / (len(train_loader)),
-                        "Training iou": train_iou / (len(train_loader)),
-                        "Training f1": train_f1 / (len(train_loader)),
+                        "Training iou": train_iou / (len(train_loader)) * b,
                         "Validation loss": val_total_loss / (len(val_loader)),
-                        "Validation iou": val_iou / (len(val_loader)),
-                        "Validation f1": val_f1 / (len(val_loader)),
+                        "Validation iou": val_iou / (len(val_loader)) * b,
                         "Epoch": e,
                         "J mean": ious_mean,
                         "J&F mean": final_mean,
                     }
                 )
+            elif wandb_log and local_rank == 0:
+                wandb.log(
+                    {
+                        "Training loss": train_total_loss / (len(train_loader)),
+                        "Training iou": train_iou / (len(train_loader)) * b,
+                        "Validation loss": val_total_loss / (len(val_loader)),
+                        "Validation iou": val_iou / (len(val_loader)) * b,
+                        "Epoch": e,
+                    }
+                )
 
-            if local_rank == 0 and ious_mean > best_j_mean:
-                best_j_mean = ious_mean
+            if local_rank == 0 and val_iou > best_val_iou:
+                best_val_iou = ious_mean
                 model.save_best_model(exp_name)
-                print(f"saved best model with val iou: {ious_mean}")
+                print(f"saved best model with val iou: {best_val_iou}")
 
             #######
             # break  #### <+++++++++++++++++++++++++++++++

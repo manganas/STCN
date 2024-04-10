@@ -208,7 +208,10 @@ class VOSDataset(Dataset):
         ]
 
         self.use_coco = False
-        if augmentation_params["use_coco"]:
+        if (
+            "use_coco" in list(augmentation_params.keys())
+            and augmentation_params["use_coco"]
+        ):
             self.use_coco = True
             davis_root_path = para["davis_root"]
             davis_path = os.path.join(davis_root_path, "2017", "trainval")
@@ -243,7 +246,7 @@ class VOSDataset(Dataset):
         return frames_idx
 
     def augment_image(
-        self, original_im, original_gt, new_im, new_gt
+        self, original_im, original_gt, new_im, new_gt, augmentor_index: int = 0
     ) -> tuple[Image.Image, Image.Image]:
         # Transforms to be applied to the new mask
         horizontal_p = np.random.rand()
@@ -273,7 +276,9 @@ class VOSDataset(Dataset):
             "scale_factor": scale_factor,
         }
 
-        this_im, this_gt = self.vos_augmentations.get_augmented_data_per_frame(
+        this_im, this_gt = self.vos_augmentations[
+            augmentor_index
+        ].get_augmented_data_per_frame(
             original_im,
             original_gt,
             new_im,
@@ -293,34 +298,46 @@ class VOSDataset(Dataset):
         vid_im_path, vid_gt_path, frames = self.get_vid_frames_paths(idx)
 
         # Number of successive augmentations for this __getitem__ call
-        n_augmentations = get_n_successive_augm(self.p_augm)
+        if self.train:
+            n_augmentations = get_n_successive_augm(self.p_augm)
 
-        # for augmentor_idx in range(len(n_augmentations)):
+            augm_vid_im_paths = [None] * len(n_augmentations)
+            augm_vid_gt_paths = [None] * len(n_augmentations)
+            augm_frames_list = [None] * len(n_augmentations)
 
-        augment = False
-        augment_more = False
-        if self.train and np.random.rand() < self.p_augm:
-            augment = True
+            if self.use_coco:
+                coco_frames_lists = [None] * len(n_augmentations)
+                coco_masks_lists = [None] * len(n_augmentations)
+
+        else:
+            n_augmentations = []
+
+        for augmentor_idx in range(len(n_augmentations)):
             j = np.random.randint(low=0, high=len(self.videos))
+
             augm_vid_im_path, augm_vid_gt_path, augm_frames = self.get_vid_frames_paths(
                 j
             )
 
+            augm_vid_im_paths[augmentor_idx] = augm_vid_im_path
+            augm_vid_gt_paths[augmentor_idx] = augm_vid_gt_path
+            augm_frames_list[augmentor_idx] = augm_frames
+
+            # could be more, but I only select 1 additional class from all the newer frames. Here I add 3 inst of 1
+            self.vos_augmentations[augmentor_idx].max_n_classes_per_frame += (
+                augmentor_idx + 1
+            ) * 3
+
             if self.use_coco:
-                coco_frames_list, coco_masks_list = (
-                    self.coco_augmentor.get_augmentation_data(self.videos[j])
-                )
+                coco_frames_list, coco_masks_list = self.coco_augmentor[
+                    augmentor_idx
+                ].get_augmentation_data(self.videos[j])
 
-            if np.random.rand() < self.third_frame_p:
-                augment_more = True
-                self.vos_augmentations.max_n_classes_per_frame = 12  # if include
-                k = np.random.randint(low=0, high=len(self.videos))
-                augm_vid_im_path_3, augm_vid_gt_path_3, augm_frames_3 = (
-                    self.get_vid_frames_paths(k)
-                )
+                coco_frames_lists[augmentor_idx] = coco_frames_list
+                coco_masks_lists[augmentor_idx] = coco_masks_list
 
-            self.vos_augmentations.reset_chosen_instances()
-            self.vos_augmentations.set_seed(100 * idx)  # if include
+            self.vos_augmentations[augmentor_idx].reset_chosen_instances()
+            self.vos_augmentations[augmentor_idx].set_seed(100 * idx + augmentor_idx)
 
         trials = 0
         while trials < 5:
@@ -333,21 +350,15 @@ class VOSDataset(Dataset):
                 # Reverse time
                 frames_idx = frames_idx[::-1]
 
-            ## Augmentation jumps
-            ## Augmentation 1
-            if augment:
-                augm_frames_idx = self.get_frames_indices(augm_frames)
+            augm_frames_indices = []
+            for augm_idx in range(len(n_augmentations)):
+                augm_frames_idx = self.get_frames_indices(augm_frames_list[augm_idx])
 
                 if np.random.rand() < 0.5:
                     # Reverse time
                     augm_frames_idx = augm_frames_idx[::-1]
 
-                ## Augmentation 2
-                if augment_more:
-                    augm_frames_idx_3 = self.get_frames_indices(augm_frames_3)
-                    if np.random.rand() < 0.5:
-                        # Reverse time
-                        augm_frames_idx_3 = augm_frames_idx_3[::-1]
+                augm_frames_indices.append(augm_frames_idx)
 
             sequence_seed = np.random.randint(2147483647)
             images = []
@@ -365,44 +376,32 @@ class VOSDataset(Dataset):
                 this_im = Image.open(path.join(vid_im_path, jpg_name)).convert("RGB")
                 this_gt = Image.open(path.join(vid_gt_path, png_name)).convert("P")
 
-                if augment:
-                    augm_f_idx = augm_frames_idx[i]
-                    augm_jpg_name = augm_frames[augm_f_idx][:-4] + ".jpg"
-                    augm_png_name = augm_frames[augm_f_idx][:-4] + ".png"
+                for augment_idx in range(len(n_augmentations)):
+                    augm_f_idx = augm_frames_indices[augment_idx][i]
+
+                    augm_jpg_name = (
+                        augm_frames_list[augment_idx][augm_f_idx][:-4] + ".jpg"
+                    )
+                    augm_png_name = (
+                        augm_frames_list[augment_idx][augm_f_idx][:-4] + ".png"
+                    )
 
                     that_im = Image.open(
-                        path.join(augm_vid_im_path, augm_jpg_name)
+                        path.join(augm_vid_im_paths[augment_idx], augm_jpg_name)
                     ).convert("RGB")
                     that_gt = Image.open(
-                        path.join(augm_vid_gt_path, augm_png_name)
+                        path.join(augm_vid_gt_paths[augment_idx], augm_png_name)
                     ).convert("P")
 
                     if self.use_coco:
                         that_im, that_gt = (
-                            coco_frames_list[augm_f_idx],
-                            coco_masks_list[augm_f_idx],
+                            coco_frames_lists[augment_idx][augm_f_idx],
+                            coco_masks_lists[augment_idx][augm_f_idx],
                         )
 
                     this_im, this_gt = self.augment_image(
-                        this_im, this_gt, that_im, that_gt
+                        this_im, this_gt, that_im, that_gt, augmentor_index=augment_idx
                     )
-
-                    if augment_more:
-                        augm_f_idx = augm_frames_idx_3[i]
-                        augm_jpg_name = augm_frames_3[augm_f_idx][:-4] + ".jpg"
-                        augm_png_name = augm_frames_3[augm_f_idx][:-4] + ".png"
-
-                        that_im = Image.open(
-                            path.join(augm_vid_im_path_3, augm_jpg_name)
-                        ).convert("RGB")
-
-                        that_gt = Image.open(
-                            path.join(augm_vid_gt_path_3, augm_png_name)
-                        ).convert("P")
-
-                        this_im, this_gt = self.augment_image(
-                            this_im, this_gt, that_im, that_gt
-                        )
 
                 reseed(sequence_seed)
                 this_im = self.all_im_dual_transform(this_im)
