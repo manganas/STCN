@@ -10,7 +10,9 @@ import torch.distributed as distributed
 
 from model.model import STCNModel
 from dataset.static_dataset import StaticTransformDataset
-from dataset.davis_online_validation_dataset import DAVISTestDataset
+
+# from dataset.davis_online_validation_dataset import DAVISTestDataset
+from dataset.yt_online_validation_dataset import YouTubeTestDataset
 
 from eval_davis_online import online_davis_eval
 
@@ -349,11 +351,14 @@ def train(para):
 
     # Online evaluation related
     steps = 5
-    online_eval_dataset = DAVISTestDataset(davis_root, steps=steps)
+    # online_eval_dataset = DAVISTestDataset(davis_root, steps=steps)
+    yv_root_online_val = path.join(path.expanduser(para["yv_root"]))
+    online_eval_dataset = YouTubeTestDataset(yv_root_online_val, steps=steps)
     online_eval_loader = DataLoader(
         online_eval_dataset, batch_size=1, shuffle=False, num_workers=4
     )
-    gt_annotations_path = path.join(davis_root, "Annotations", "480p")
+    # gt_annotations_path = path.join(davis_root, "Annotations", "480p")
+    gt_annotations_path = path.join(yv_root_online_val, "train_480p", "Annotations")
 
     # WANDB Setup
     exp_name = para["exp_name"]
@@ -458,29 +463,29 @@ def train(para):
 
                 # run davis validation iou for every 5th frame or part of videos
 
-            if e % 100 == 0:
-                ious_mean, fs_mean = online_davis_eval(
-                    online_eval_loader, model.STCN.module, gt_annotations_path
-                )
+            # if e % 100 == 0:
+            #     ious_mean, fs_mean = online_davis_eval(
+            #         online_eval_loader, model.STCN.module, gt_annotations_path
+            #     )
 
-                final_mean = (ious_mean + fs_mean) / 2.0
+            #     final_mean = (ious_mean + fs_mean) / 2.0
 
             #### <+++++++++++++++++++++++++++++++
 
-            if wandb_log and local_rank == 0 and e % 100 == 0:
-                wandb.log(
-                    {
-                        "Training loss": train_total_loss / (len(train_loader)),
-                        "Training iou": train_iou / (len(train_loader)) * b,
-                        "Validation loss": val_total_loss / (len(val_loader)),
-                        "Validation iou": val_iou / (len(val_loader)) * b,
-                        "Epoch": e,
-                        "J mean": ious_mean,
-                        "J&F mean": final_mean,
-                        "Current max skip": cur_skip,
-                    }
-                )
-            elif wandb_log and local_rank == 0:
+            # if wandb_log and local_rank == 0 and e % 100 == 0:
+            #     wandb.log(
+            #         {
+            #             "Training loss": train_total_loss / (len(train_loader)),
+            #             "Training iou": train_iou / (len(train_loader)) * b,
+            #             "Validation loss": val_total_loss / (len(val_loader)),
+            #             "Validation iou": val_iou / (len(val_loader)) * b,
+            #             "Epoch": e,
+            #             "J mean": ious_mean,
+            #             "J&F mean": final_mean,
+            #             "Current max skip": cur_skip,
+            #         }
+            #     )
+            if wandb_log and local_rank == 0:
                 wandb.log(
                     {
                         "Training loss": train_total_loss / (len(train_loader)),

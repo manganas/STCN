@@ -1,115 +1,111 @@
 from pathlib import Path
 import numpy as np
+from PIL import Image
 
 from dataset.augmentations.augmentors import (
     DAVISAugmentor,
     YTAugmentor,
     COCOAugmentor,
     StaticAugmentor,
-    FSSAugmentor,
 )
 
-from PIL import Image
 
+class AugmentationDataGenerator:
 
-class Augmentor:
-    def __init__(self, datasets: list[str], probabilities: list[float] = None):
+    def get_n_successive_augm(prob_lists: list[float]) -> int:
 
-        # Initialize the augmentors here, since for COCO it takes around 14 seconds
-        # for the index to be built.
+        out_list = []
 
-        data_paths_base = Path("/work3/s220493/")
-        static_paths_base = data_paths_base.joinpath("static")
-        coco_path = data_paths_base.joinpath("coco")
-        davis_path = data_paths_base.joinpath(
-            "DAVIS", "2017", "trainval"
-        )  # for vos type datasets, also ytvos
+        for i in range(len(prob_lists)):
+            a = np.random.rand()
+            if a < prob_lists[i]:
+                if i == 0 or i - 1 in out_list:
+                    out_list.append(i)
+                else:
+                    break
 
-        # Hardcoded paths for now!
-        SUPPORTED_DATASETS = {
-            "BIG_small": static_paths_base.joinpath("BIG_small"),  # hyma
-            "DUTS-TE": static_paths_base.joinpath("DUTS-TE"),  # hyma
-            "DUTS-TR": static_paths_base.joinpath("DUTS-TR"),  # hyma
-            "HRSOD_small": static_paths_base.joinpath("HRSOD_small"),  # hyma
-            "ecssd": static_paths_base.joinpath("ecssd"),  # hyma
-            "fss": static_paths_base.joinpath("fss"),  # in folders
-            "coco": coco_path,
-            "davis": davis_path,
-            "yt": data_paths_base.joinpath("YouTube", "train_480p"),
-        }
+        return len(out_list)
 
-        ##
+    def calculate_nested_probabilities(augm_probs: list[float]) -> list[float]:
+        cumprob = []
+        result = []
+        augm_probs = sorted(augm_probs, reverse=True)
+        for i in range(len(augm_probs)):
+            if i == 0:
+                cumprob.append(augm_probs[i])
+                result.append(augm_probs[i])
+                continue
 
-        self.datasets = datasets  # list of strings for each dataset
+            res = augm_probs[i] / cumprob[i - 1]
 
-        for dataset in datasets:
-            if dataset not in list(SUPPORTED_DATASETS.keys()):
-                raise NotImplementedError(
-                    "Dataset name passed in Augmentor is not supported!"
-                )
+            result.append(res)
+            cumprob.append(cumprob[i - 1] * res)
 
-        if probabilities:
-            assert len(datasets) == len(
-                probabilities
-            ), "Not the same number of probabilities and datasets for augmentation passed!"
-            self.probabilities = probabilities
-        else:
-            self.probabilities = [1 // len(datasets)] * len(self.datasets)
+        return result
 
-        # davis, coco, static, fss (not hyma)
+    # def __init__(self, datasets: dict[str:Path], probabilities: list[float] = None):
+    def __init__(self, datasets: dict[str:Path], davis_root: Path):
+
+        self.datasets = datasets
+
+        # if probabilities:
+        #     assert len(datasets) == len(
+        #         probabilities
+        #     ), "Not the same number of probabilities and datasets for augmentation passed!"
+        #     self.probabilities = probabilities
+        # else:
+        #     self.probabilities = [1 // len(datasets)] * len(datasets)
+
         self.augmentors = {}
 
-        for dataset in datasets:
+        for dataset in datasets.keys():
 
-            if dataset in ["coco"]:
-                tmp_augm = self.augmentors.get("coco", None)
-                if not tmp_augm:
-                    self.augmentors["coco"] = COCOAugmentor(coco_path, davis_path)
-            elif dataset in ["davis"]:
-                tmp_augm = self.augmentors.get("davis", None)
-                if not tmp_augm:
-                    self.augmentors["davis"] = DAVISAugmentor(davis_path)
-            elif dataset in ["yt"]:
-                tmp_augm = self.augmentors.get("yt", None)
-                if not tmp_augm:
-                    self.augmentors["yt"] = YTAugmentor(SUPPORTED_DATASETS["yt"])
-            elif dataset in ["fss"]:
-                tmp_augm = self.augmentors.get("fss", None)
-                if not tmp_augm:
-                    self.augmentors["fss"] = FSSAugmentor(
-                        SUPPORTED_DATASETS["fss"], davis_path
-                    )
+            if dataset == "davis":
+                self.augmentors["davis"] = DAVISAugmentor(datasets["davis"])
+            elif dataset == "yt":
+                self.augmentors["yt"] = YTAugmentor(datasets["yt"])
+            elif dataset == "coco":
+                self.augmentors["coco"] = COCOAugmentor(datasets[dataset], davis_root)
             else:
-                tmp_augm = self.augmentors.get(dataset, None)
-                if not tmp_augm:
-                    self.augmentors[dataset] = StaticAugmentor(
-                        SUPPORTED_DATASETS[dataset], davis_path
-                    )
+
+                self.augmentors[dataset] = StaticAugmentor(
+                    datasets[dataset], davis_root
+                )
 
         ##### Varying members per __getitem__ call
-        self.selected_datasets = []
-        self.selected_augmentors = []
+        self._selected_datasets = []
+        self._selected_augmentors = []
 
-    def select_datasets(self, num_of_augmentations: int, replace: bool = True) -> None:
-        self.selected_datasets = np.random.choice(
-            self.datasets, size=num_of_augmentations, replace=replace
+    def _select_datasets(self, num_of_augmentations: int, replace: bool = True) -> None:
+
+        if not replace and num_of_augmentations > len(self.datasets):
+            print(
+                "Number of augmentations larger than number of available datasets without replace. Choice with replace."
+            )
+            replace = True
+
+        self._selected_datasets = np.random.choice(
+            list(self.datasets.keys()), size=num_of_augmentations, replace=replace
         )
+        return
 
-        return self.selected_datasets
+    def select_augmentors(
+        self, num_of_augmentations: int, replace: bool = True
+    ) -> None:
+        self._selected_datasets = []
+        self._select_datasets(num_of_augmentations, replace)
 
-    def set_augmentors(self) -> None:
-        self.selected_augmentors = []
-        for dataset in self.selected_datasets:
-            self.selected_augmentors.append(self.augmentors[dataset])
-
+        self._selected_augmentors = []
+        for dataset in self._selected_datasets:
+            self._selected_augmentors.append(self.augmentors[dataset])
         return
 
     def get_augmentation_data(
         self, augmentation_idx: int
-    ) -> tuple[list[Path], list[Path]]:
-        augmentor = self.selected_augmentors[augmentation_idx]
+    ) -> tuple[list[Image.Image], list[Image.Image]]:
+        augmentor = self._selected_augmentors[augmentation_idx]
 
         # Get a random data point
-        images_paths, masks_path = augmentor.get_augmentation_data()
+        augm_frames, augm_masks = augmentor.get_augmentation_data()
 
-        return images_paths, masks_path
+        return augm_frames, augm_masks

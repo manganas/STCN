@@ -3,10 +3,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from dataset.data_augmentations_static_motion import StaticImagesAugmentor
-
-from dataset.data_augmentations_coco import CocoAugmentor
-from pycocotools.coco import COCO
+from dataset.augmentations.data_augmentations_static_motion import (
+    StaticImagesAugmentor,
+    CocoAugmentor,
+)
 
 
 class DAVISAugmentor:
@@ -62,7 +62,7 @@ class DAVISAugmentor:
 
         return frames_idx
 
-    def get_augmentation_data(self) -> tuple[list[Path], list[Path]]:
+    def get_augmentation_data(self) -> tuple[list[Image.Image]]:
 
         # Get a random data point
         j = np.random.randint(low=0, high=self.__len__())
@@ -143,7 +143,7 @@ class YTAugmentor:
 
         return frames_idx
 
-    def get_augmentation_data(self) -> tuple[list[Path], list[Path]]:
+    def get_augmentation_data(self) -> tuple[list[Image.Image]]:
 
         # Get a random data point
         j = np.random.randint(low=0, high=self.__len__())
@@ -180,14 +180,7 @@ class COCOAugmentor:
         self.davis_root = davis_root
         self.coco_augmentor = CocoAugmentor(coco_root, davis_root)
 
-        # COCO related
-        coco_annotations_path = coco_root.joinpath(
-            "annotations", "instances_train2017.json"
-        )
-        self.coco_images_path = coco_root.joinpath("train2017")
-        self.coco = COCO(coco_annotations_path)
-
-        self.img_Ids = sorted(self.coco.getImgIds())
+        self.img_Ids = self.coco_augmentor.img_Ids
 
         self.davis_videos = self.coco_augmentor.davis_video_names
 
@@ -211,7 +204,7 @@ class COCOAugmentor:
 
         return frames_idx
 
-    def get_augmentation_data(self) -> tuple[list[Path], list[Path]]:
+    def get_augmentation_data(self) -> tuple[list[Image.Image]]:
 
         # Get a random data point
         j = np.random.randint(low=0, high=self.__len__())
@@ -269,78 +262,21 @@ class StaticAugmentor:
 
         return frames_idx
 
-    def get_augmentation_data(self) -> tuple[list[Path], list[Path]]:
+    def get_augmentation_data(self) -> tuple[list[Image.Image]]:
 
         # Get a random data point
         j = np.random.randint(low=0, high=self.__len__())
 
-        coco_frames_list, coco_masks_list = (
+        augm_frames_list, augm_masks_list = (
             self.static_frame_augmentor.get_augmentation_data(self.davis_videos[j])
         )
-        frames_idx = self.get_frames_indices(coco_frames_list)  # includes reversal
+        frames_idx = self.get_frames_indices(augm_frames_list)  # includes reversal
 
         frames = []
         masks = []
 
         for idx in frames_idx:
-            frames.append(coco_frames_list[idx])
-            masks.append(coco_masks_list[idx])
-
-        return frames, masks
-
-
-class FSSAugmentor:
-    def __init__(self, root_dir: Path, davis_root: Path):
-        self.root_dir = root_dir
-
-        self.max_jump = 5
-
-        # Use all images
-        self.all_images = sorted(list(root_dir.glob("*.jpg")))
-        self.all_masks = sorted(list(root_dir.glob("*.png")))
-
-        assert len(self.all_images) == len(
-            self.all_masks
-        ), f"Not the same number of images and masks for dataset {root_dir.as_posix()}"
-
-        self.static_frame_augmentor = StaticImagesAugmentor(root_dir, davis_root)
-        self.davis_videos = self.static_frame_augmentor.davis_video_names
-
-    def __len__(self):
-        return len(self.static_frame_augmentor.davis_video_names)
-
-    def get_frames_indices(self, frames: list) -> list[int]:
-        this_max_jump = min(len(frames), self.max_jump)
-        start_idx = np.random.randint(len(frames) - this_max_jump + 1)
-        f1_idx = start_idx + np.random.randint(this_max_jump + 1) + 1
-        f1_idx = min(f1_idx, len(frames) - this_max_jump, len(frames) - 1)
-
-        f2_idx = f1_idx + np.random.randint(this_max_jump + 1) + 1
-        f2_idx = min(f2_idx, len(frames) - this_max_jump // 2, len(frames) - 1)
-
-        frames_idx = [start_idx, f1_idx, f2_idx]
-
-        if np.random.rand() < 0.5:
-            # Reverse time
-            frames_idx = frames_idx[::-1]
-
-        return frames_idx
-
-    def get_augmentation_data(self) -> tuple[list[Path], list[Path]]:
-
-        # Get a random data point
-        j = np.random.randint(low=0, high=self.__len__())
-
-        coco_frames_list, coco_masks_list = (
-            self.static_frame_augmentor.get_augmentation_data(self.davis_videos[j])
-        )
-        frames_idx = self.get_frames_indices(coco_frames_list)  # includes reversal
-
-        frames = []
-        masks = []
-
-        for idx in frames_idx:
-            frames.append(coco_frames_list[idx])
-            masks.append(coco_masks_list[idx])
+            frames.append(augm_frames_list[idx])
+            masks.append(augm_masks_list[idx])
 
         return frames, masks
