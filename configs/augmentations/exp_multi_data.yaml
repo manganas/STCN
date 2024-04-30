@@ -1,8 +1,8 @@
 # Augmentation probability
-augmentation_p: [0.75]
+augmentation_p: [0.75, 0.5, 0.25]
 
-# Use COCO
-use_coco: False
+# Datasets
+augmentation_datasets: ['yt', 'davis', 'fss', 'ecssd', 'BIG_small','DUTS-TE', 'DUTS-TR', 'HRSOD_small', 'coco']
 
 # Tranformations for new mask params
 

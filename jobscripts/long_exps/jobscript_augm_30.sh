@@ -18,18 +18,22 @@ source ../venv/bin/activate
 
 n_epochs=3000
 
-augm_p=[0.75]
 davis_part=0.5
 yv_part=0
 
 
 
 # exp_simple_davis or exp1
-augmentations=exp2
+augmentations=exp_multi_data
 davis_root="/work3/s220493/DAVIS"
-torchrun --nproc_per_node=2 --standalone train.py exp_name="DAVIS-$augm_p-davis-$davis_part-yv-$yv_part"\
- n_epochs=$n_epochs augmentations.augmentation_p=$augm_p\
+augm_datasets=['davis']
+augm_p=[0.75]
+
+torchrun --nproc_per_node=2 --standalone train.py exp_name="davis-$davis_part-yv-$yv_part-2"\
+ n_epochs=$n_epochs\
  davis_root=$davis_root \
  save_model_path='/work3/s220493/saves/various_sizes_datasets/' \
  davis_part=$davis_part \
- yt_vos_part=$yv_part
+ yt_vos_part=$yv_part \
+ +augmentations.augmentation_datasets=$augm_datasets \
+ +augmentations.augmentation_p=$augm_p

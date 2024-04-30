@@ -5,8 +5,6 @@ from numpy.typing import NDArray
 
 from PIL import Image
 
-from pycocotools.coco import COCO
-
 
 def calculate_bbox_center(bbox_dims: tuple[int], start_end: bool = True) -> tuple[int]:
     if not start_end:
@@ -48,10 +46,10 @@ def select_instance(mask: NDArray, instance: int) -> NDArray:
     return new_mask
 
 
-class CocoAugmentor:
-    def __init__(self, coco_root_dir: Path, davis_root_path: Path):
+class StaticImagesAugmentor:
+    def __init__(self, static_dataset_root: Path, davis_root_path: Path):
 
-        coco_root_dir = Path(coco_root_dir)
+        self.static_dataset_root = static_dataset_root
         davis_root_path = Path(davis_root_path)
 
         # DAVIS related
@@ -71,14 +69,13 @@ class CocoAugmentor:
                 continue
             self.davis_video_names.append(vid)
 
-        # COCO related
-        coco_annotations_path = coco_root_dir.joinpath(
-            "annotations", "instances_train2017.json"
-        )
-        self.coco_images_path = coco_root_dir.joinpath("train2017")
-        self.coco = COCO(coco_annotations_path)
+        # Use all images
+        self.all_images = sorted(list(static_dataset_root.glob("**/*.jpg")))
+        self.all_masks = sorted(list(static_dataset_root.glob("**/*.png")))
 
-        self.img_Ids = sorted(self.coco.getImgIds())
+        assert len(self.all_images) == len(
+            self.all_masks
+        ), f"Not the same number of images and masks for dataset {static_dataset_root.as_posix()}"
 
     def prepare_coco_mask(
         self,
@@ -123,28 +120,35 @@ class CocoAugmentor:
     ) -> tuple[NDArray]:
 
         found = False
+
         while not found:
-            img_idx = np.random.choice(self.img_Ids, size=1)
-            img_dict = self.coco.loadImgs(img_idx)[0]
+            # img_idx = np.random.choice(self.img_Ids, size=1)
+            img_idx = np.random.randint(low=0, high=len(self.all_images))
 
-            annIds = self.coco.getAnnIds(imgIds=img_dict["id"], iscrowd=None)
-            anns = self.coco.loadAnns(annIds)
+            # img_dict = self.coco.loadImgs(img_idx)[0]
 
-            img_area = img_dict["height"] * img_dict["width"]
+            # annIds = self.coco.getAnnIds(imgIds=img_dict["id"], iscrowd=None)
+            # anns = self.coco.loadAnns(annIds)
 
-            permuted_ans = np.random.permutation(anns)
+            # img_area = img_dict["height"] * img_dict["width"]
+
+            mask_tmp = self.all_masks[img_idx]
+            mask_tmp = np.array(Image.open(mask_tmp).convert("P"))
+
+            img_area = mask_tmp.shape[0] * mask_tmp.shape[1]
+
+            anns = np.unique(mask_tmp)[1:]
+
+            if len(anns) == 0:
+                continue
 
             min_dist = 10000
             min_i = -1
 
-            for jj, ann in enumerate(permuted_ans):
-                mask = self.prepare_coco_mask(self.coco.annToMask(ann), px_padding=45)
+            for jj, ann in enumerate(anns):
 
-                if len(np.unique(mask)[1:]) == 0:
-                    continue
-
-                # if ann["iscrowd"]:
-                #     continue
+                mask = np.zeros_like(mask_tmp)
+                mask[mask_tmp == ann] = 1
 
                 bbox_dims = get_bbox_start_end(mask)
                 bbox_center = calculate_bbox_center(bbox_dims)
@@ -157,7 +161,9 @@ class CocoAugmentor:
             if min_i == -1:
                 continue
 
-            mask = self.coco.annToMask(anns[min_i])
+            mask = np.zeros_like(mask_tmp)
+            mask[mask_tmp == anns[min_i]] = 1
+
             if (
                 mask.sum() >= low_threshold * img_area
                 and mask.sum() < high_threshold * img_area
@@ -166,7 +172,7 @@ class CocoAugmentor:
                 found = True
                 break
 
-        img_path = self.coco_images_path.joinpath(img_dict["file_name"])
+        img_path = self.all_images[img_idx]
         img = np.array(Image.open(img_path).convert("RGB"))
 
         if resize_shape_h_w:

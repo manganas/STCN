@@ -17,7 +17,10 @@ from eval_davis_online import online_davis_eval
 # from dataset.vos_dataset import VOSDataset
 # from dataset.vos_dataset_augm import VOSDataset
 
-from dataset.vos_dataset_augm_multi import VOSDataset
+# from dataset.vos_dataset_augm_multi import VOSDataset
+
+from dataset.vos_dataset_augm_multi_datasets import VOSDataset
+
 from util.plotting_utils import plot_frame_of_batch
 
 from util.logger import TensorboardLogger
@@ -54,7 +57,7 @@ def train(para):
     """
     Initial setup
     """
-    seed = 14159265
+    seed = 14159265 + 666
 
     # Init distributed environment
     distributed.init_process_group(backend="nccl")
@@ -100,6 +103,7 @@ def train(para):
             )
         else:
             long_id = None
+
         logger = TensorboardLogger(para["id"], long_id)
         logger.log_string("hyperpara", str(para))
 
@@ -381,7 +385,6 @@ def train(para):
     #             name=f"frame_content_b{j}_frame{i}.png",
     #         )
 
-
     # print("Done!")
     # exit()
 
@@ -390,6 +393,8 @@ def train(para):
     """
     best_val_iou = -1
     best_j_mean = -1
+
+    cur_skip = 5  # hardcoded here!!! Look into vosloader for init value
 
     # Need this to select random bases in different workers
     np.random.seed(np.random.randint(2**30 - 1) + local_rank * 100)
@@ -472,6 +477,7 @@ def train(para):
                         "Epoch": e,
                         "J mean": ious_mean,
                         "J&F mean": final_mean,
+                        "Current max skip": cur_skip,
                     }
                 )
             elif wandb_log and local_rank == 0:
@@ -482,19 +488,20 @@ def train(para):
                         "Validation loss": val_total_loss / (len(val_loader)),
                         "Validation iou": val_iou / (len(val_loader)) * b,
                         "Epoch": e,
+                        "Current max skip": cur_skip,
                     }
                 )
 
-            if local_rank == 0 and val_iou > best_val_iou:
-                best_val_iou = ious_mean
-                model.save_best_model(exp_name)
-                print(f"saved best model with val iou: {best_val_iou}")
+            # if local_rank == 0 and val_iou > best_val_iou:
+            #     best_val_iou = ious_mean
+            #     model.save_best_model(exp_name)
+            #     print(f"saved best model with val iou: {best_val_iou}")
 
             #######
             # break  #### <+++++++++++++++++++++++++++++++
 
     finally:
-        if not para["debug"] and model.logger is not None and total_iter > 5000:
+        if not para["debug"] and model.logger is not None:
             model.save(total_iter, e)
         # Clean up
         distributed.destroy_process_group()

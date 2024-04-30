@@ -19,6 +19,8 @@ from dataset.data_augmentations import (
 )
 from dataset.data_augmentations_coco import CocoAugmentor
 
+from dataset.augmentations.base_augmentor import Augmentor
+
 
 class VOSDataset(Dataset):
     """
@@ -180,43 +182,50 @@ class VOSDataset(Dataset):
         self.scale_factor_upper_lim = augmentation_params["scale_factor_upper_lim"]
         self.translation_lim = augmentation_params["translation_lim"]
 
-        # better to instantiate more augmentor objects here
-        # than to dynamically instantiate in the call of __getitem__
-
-        self.vos_augmentations = []
-        for _ in range(len(self.p_augm)):
-            self.vos_augmentations.append(
-                VOSAugmentations(
-                    select_instances=augmentation_params["select_instances"],
-                    foreground_p=augmentation_params["foreground_p"],
-                    include_new_instances=augmentation_params["include_new_instances"],
-                )
-            )
-
-        # self.vos_augmentations = VOSAugmentations(
-        #     select_instances=augmentation_params["select_instances"],
-        #     foreground_p=augmentation_params["foreground_p"],
-        #     include_new_instances=augmentation_params["include_new_instances"],
-        # )
-
         self.transformations_list = [
             VOSTransformations.random_horizontal_flip(p_horizontal_flip),
             VOSTransformations.random_scale,
             VOSTransformations.random_translation,
         ]
 
-        self.use_coco = False
-        if (
-            "use_coco" in list(augmentation_params.keys())
-            and augmentation_params["use_coco"]
-        ):
-            self.use_coco = True
-            davis_root_path = para["davis_root"]
-            davis_path = os.path.join(davis_root_path, "2017", "trainval")
-            # self.coco_augmentor = CocoAugmentor(para["coco_root"], davis_path)
-            self.coco_augmentor = []
-            for _ in range(len(self.p_augm)):
-                self.coco_augmentor.append(CocoAugmentor(para["coco_root"], davis_path))
+        # Augmentors and datasets
+        datasets = augmentation_params["augmentation_datasets"]
+        self.augmentor = Augmentor(
+            datasets=datasets,
+            probabilities=None,
+        )
+
+        self.vos_augmentations = VOSAugmentations(
+            select_instances=augmentation_params["select_instances"],
+            foreground_p=augmentation_params["foreground_p"],
+            include_new_instances=augmentation_params["include_new_instances"],
+        )
+
+        # better to instantiate more augmentor objects here
+        # than to dynamically instantiate in the call of __getitem__
+
+        # self.vos_augmentations = []
+        # for _ in range(len(self.p_augm)):
+        #     self.vos_augmentations.append(
+        #         VOSAugmentations(
+        #             select_instances=augmentation_params["select_instances"],
+        #             foreground_p=augmentation_params["foreground_p"],
+        #             include_new_instances=augmentation_params["include_new_instances"],
+        #         )
+        #     )
+
+        # self.use_coco = False
+        # if (
+        #     "use_coco" in list(augmentation_params.keys())
+        #     and augmentation_params["use_coco"]
+        # ):
+        #     self.use_coco = True
+        #     davis_root_path = para["davis_root"]
+        #     davis_path = os.path.join(davis_root_path, "2017", "trainval")
+        #     # self.coco_augmentor = CocoAugmentor(para["coco_root"], davis_path)
+        #     self.coco_augmentor = []
+        #     for _ in range(len(self.p_augm)):
+        #         self.coco_augmentor.append(CocoAugmentor(para["coco_root"], davis_path))
 
         print(
             f"Augmentations, scaling: upper={self.scale_factor_upper_lim}, lower={self.scale_factor_lower_lim}"
@@ -244,7 +253,7 @@ class VOSDataset(Dataset):
         return frames_idx
 
     def augment_image(
-        self, original_im, original_gt, new_im, new_gt, augmentor_index: int = 0
+        self, original_im, original_gt, new_im, new_gt
     ) -> tuple[Image.Image, Image.Image]:
         # Transforms to be applied to the new mask
         horizontal_p = np.random.rand()
@@ -274,9 +283,7 @@ class VOSDataset(Dataset):
             "scale_factor": scale_factor,
         }
 
-        this_im, this_gt = self.vos_augmentations[
-            augmentor_index
-        ].get_augmented_data_per_frame(
+        this_im, this_gt = self.vos_augmentations.get_augmented_data_per_frame(
             original_im,
             original_gt,
             new_im,
@@ -298,45 +305,55 @@ class VOSDataset(Dataset):
         # Number of successive augmentations for this __getitem__ call
         if self.train:
             n_augmentations = get_n_successive_augm(self.p_augm)
-            print(f"Augmentation p's: {n_augmentations}")
 
-            augm_vid_im_paths = [None] * len(n_augmentations)
-            augm_vid_gt_paths = [None] * len(n_augmentations)
-            augm_frames_list = [None] * len(n_augmentations)
+            # Select from which datasets the augmentation data will come from
+            # eg. selected_datasets = ['coco', 'fss', 'davis/yt']
+            augmentation_datasets = self.augmentor.select_datasets(
+                len(n_augmentations), replace=True
+            )
 
-            if self.use_coco:
-                coco_frames_lists = [None] * len(n_augmentations)
-                coco_masks_lists = [None] * len(n_augmentations)
+            self.augmentor.set_augmentors()
+
+            # #################
+            # #################
+            # #################
+            # augm_vid_im_paths = [None] * len(n_augmentations)
+            # augm_vid_gt_paths = [None] * len(n_augmentations)
+            # augm_frames_list = [None] * len(n_augmentations)
+
+            # if self.use_coco:
+            #     coco_frames_lists = [None] * len(n_augmentations)
+            #     coco_masks_lists = [None] * len(n_augmentations)
+            # #################
+            # #################
+            # #################
 
         else:
             n_augmentations = []
 
         for augmentor_idx in range(len(n_augmentations)):
-            j = np.random.randint(low=0, high=len(self.videos))
+            # j = np.random.randint(low=0, high=len(self.videos))
 
-            augm_vid_im_path, augm_vid_gt_path, augm_frames = self.get_vid_frames_paths(
-                j
-            )
+            # augm_vid_im_path, augm_vid_gt_path, augm_frames = self.get_vid_frames_paths(
+            #     j
+            # )
 
-            augm_vid_im_paths[augmentor_idx] = augm_vid_im_path
-            augm_vid_gt_paths[augmentor_idx] = augm_vid_gt_path
-            augm_frames_list[augmentor_idx] = augm_frames
+            # augm_vid_im_paths[augmentor_idx] = augm_vid_im_path
+            # augm_vid_gt_paths[augmentor_idx] = augm_vid_gt_path
+            # augm_frames_list[augmentor_idx] = augm_frames
 
             # could be more, but I only select 1 additional class from all the newer frames. Here I add 3 inst of 1
-            self.vos_augmentations[augmentor_idx].max_n_classes_per_frame += (
-                augmentor_idx + 1
-            ) * 3
+            self.vos_augmentations.max_n_classes_per_frame += (augmentor_idx + 1) * 3
 
-            if self.use_coco:
-                coco_frames_list, coco_masks_list = self.coco_augmentor[
-                    augmentor_idx
-                ].get_augmentation_data(self.videos[j])
+            # if self.use_coco:
+            #     coco_frames_list, coco_masks_list = self.coco_augmentor[
+            #         augmentor_idx
+            #     ].get_augmentation_data(self.videos[j])
 
-                coco_frames_lists[augmentor_idx] = coco_frames_list
-                coco_masks_lists[augmentor_idx] = coco_masks_list
+            #     coco_frames_lists[augmentor_idx] = coco_frames_list
+            #     coco_masks_lists[augmentor_idx] = coco_masks_list
 
-            self.vos_augmentations[augmentor_idx].reset_chosen_instances()
-            self.vos_augmentations[augmentor_idx].set_seed(100 * idx + augmentor_idx)
+        self.vos_augmentations.reset_chosen_instances()
 
         trials = 0
         while trials < 5:
@@ -350,14 +367,14 @@ class VOSDataset(Dataset):
                 frames_idx = frames_idx[::-1]
 
             augm_frames_indices = []
-            for augm_idx in range(len(n_augmentations)):
-                augm_frames_idx = self.get_frames_indices(augm_frames_list[augm_idx])
+            # for augm_idx in range(len(n_augmentations)):
+            # augm_frames_idx = self.get_frames_indices(augm_frames_list[augm_idx])
 
-                if np.random.rand() < 0.5:
-                    # Reverse time
-                    augm_frames_idx = augm_frames_idx[::-1]
+            # if np.random.rand() < 0.5:
+            #     # Reverse time
+            #     augm_frames_idx = augm_frames_idx[::-1]
 
-                augm_frames_indices.append(augm_frames_idx)
+            # augm_frames_indices.append(augm_frames_idx)
 
             sequence_seed = np.random.randint(2147483647)
             images = []
@@ -385,38 +402,40 @@ class VOSDataset(Dataset):
                 ###
 
             for augment_idx in range(len(n_augmentations)):
-                # augmentor = (
-                #     self.get_augmentor_type()
-                # )  # one for each type of dataset
+                # augmentor = self.augmentor.augmentors[augment_idx]
+                self.vos_augmentations.set_seed(100 * idx + augmentor_idx)
+                self.vos_augmentations.reset_chosen_instances()
+
+                new_images, new_masks = self.augmentor.get_augmentation_data(
+                    augment_idx
+                )
                 for i in range(len(frames_idx)):
-                    augm_f_idx = augm_frames_indices[augment_idx][i]
+                    # augm_f_idx = augm_frames_indices[augment_idx][i]
 
-                    augm_jpg_name = (
-                        augm_frames_list[augment_idx][augm_f_idx][:-4] + ".jpg"
-                    )
-                    augm_png_name = (
-                        augm_frames_list[augment_idx][augm_f_idx][:-4] + ".png"
-                    )
+                    # augm_jpg_name = (
+                    #     augm_frames_list[augment_idx][augm_f_idx][:-4] + ".jpg"
+                    # )
+                    # augm_png_name = (
+                    #     augm_frames_list[augment_idx][augm_f_idx][:-4] + ".png"
+                    # )
 
-                    that_im = Image.open(
-                        path.join(augm_vid_im_paths[augment_idx], augm_jpg_name)
-                    ).convert("RGB")
-                    that_gt = Image.open(
-                        path.join(augm_vid_gt_paths[augment_idx], augm_png_name)
-                    ).convert("P")
+                    that_im = new_images[i]
+                    that_gt = new_masks[i]
 
-                    if self.use_coco:
-                        that_im, that_gt = (
-                            coco_frames_lists[augment_idx][augm_f_idx],
-                            coco_masks_lists[augment_idx][augm_f_idx],
-                        )
+                    # that_im = Image.open(new_images_paths[i]).convert("RGB")
+                    # that_gt = Image.open(new_masks_paths[i]).convert("P")
+
+                    # if self.use_coco:
+                    #     that_im, that_gt = (
+                    #         coco_frames_lists[augment_idx][augm_f_idx],
+                    #         coco_masks_lists[augment_idx][augm_f_idx],
+                    #     )
 
                     this_im, this_gt = self.augment_image(
                         images_[i],
                         masks_[i],
                         that_im,
                         that_gt,
-                        augmentor_index=augment_idx,
                     )
 
                     images_[i] = this_im
@@ -426,36 +445,6 @@ class VOSDataset(Dataset):
                     # for davis only. Others empty
                     # augmentor.reset()
                 ###
-
-                # for augment_idx in range(len(n_augmentations)):
-                #     augm_f_idx = augm_frames_indices[augment_idx][i]
-
-                #     augm_jpg_name = (
-                #         augm_frames_list[augment_idx][augm_f_idx][:-4] + ".jpg"
-                #     )
-                #     augm_png_name = (
-                #         augm_frames_list[augment_idx][augm_f_idx][:-4] + ".png"
-                #     )
-
-                #     that_im = Image.open(
-                #         path.join(augm_vid_im_paths[augment_idx], augm_jpg_name)
-                #     ).convert("RGB")
-                #     that_gt = Image.open(
-                #         path.join(augm_vid_gt_paths[augment_idx], augm_png_name)
-                #     ).convert("P")
-
-                #     if self.use_coco:
-                #         that_im, that_gt = (
-                #             coco_frames_lists[augment_idx][augm_f_idx],
-                #             coco_masks_lists[augment_idx][augm_f_idx],
-                #         )
-
-                #     this_im, this_gt = self.augment_image(
-                #         this_im, this_gt, that_im, that_gt, augmentor_index=augment_idx
-                #     )
-
-                # images_[i](this_im)
-                # masks_.append(this_gt)
 
             for i in range(len(frames_idx)):
                 this_im = images_[i]

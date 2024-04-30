@@ -1,7 +1,5 @@
-from typing import Callable
 from numpy.typing import ArrayLike
 from torch import Tensor
-import torch
 
 from PIL import Image
 import numpy as np
