@@ -1,7 +1,7 @@
 #!/bin/sh
 #BSUB -q gpua100
 #BSUB -gpu "num=2:mode=exclusive_process"
-#BSUB -J davis_augm_30
+#BSUB -J warmup_no_augm_2000
 #BSUB -n 8
 #BSUB -W 48:00
 #BSUB -R "span[hosts=1]"
@@ -16,10 +16,10 @@ module swap cuda/11.6
 
 source ../venv/bin/activate
 
-n_epochs=6000
+n_epochs=3000
 
-davis_part=0.5
-yv_part=0
+davis_part=1
+yv_part=0.56
 
 
 
@@ -27,16 +27,16 @@ yv_part=0
 augmentations=exp_multi_data
 davis_root="/work3/s220493/DAVIS"
 augm_datasets=['davis']
-augm_p=[0.75]
+augm_p=[0]
 
-load_model="/work3/s220493/saves/various_sizes_datasets/checkpoint_davis-0.5-yv-0-2_checkpoint.pth"
+exp_name="warmup_davis_$davis_part-yt_$yv_part-no_augm"
 
-torchrun --nproc_per_node=2 --standalone train.py exp_name="davis-$davis_part-yv-$yv_part-2"\
+
+torchrun --nproc_per_node=2 --standalone train.py exp_name=$exp_name\
  n_epochs=$n_epochs\
  davis_root=$davis_root \
- save_model_path='/work3/s220493/saves/various_sizes_datasets/' \
+ save_model_path='/work3/s220493/saves/warmup/' \
  davis_part=$davis_part \
  yt_vos_part=$yv_part \
- load_model=$load_model \
  +augmentations.augmentation_datasets=$augm_datasets \
  +augmentations.augmentation_p=$augm_p

@@ -7,7 +7,7 @@ wandb_log: True
 
 
 # data paths
-static_root: "../static"
+static_root: "/work3/s220493/static"
 bl_root: '../BL30K'
 yv_root: '/work3/s220493/YouTube'
 yv2018_root: '/work3/s220493/YouTube2018'

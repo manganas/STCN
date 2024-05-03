@@ -303,9 +303,12 @@ class STCNModel:
         self.optimizer.load_state_dict(optimizer)
         self.scheduler.load_state_dict(scheduler)
 
+        epoch = checkpoint["current_epoch"]
+
         print("Model loaded.")
 
-        return it
+        # return it
+        return it, epoch
 
     def load_network(self, path):
         # This method loads only the network weight and should be used to load a pretrained model
