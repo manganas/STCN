@@ -14,7 +14,7 @@ nvidia-smi
 module swap python3/3.9.11
 module swap cuda/11.6
 
-source ../venv/bin/activate
+source /work3/s220493/venv/bin/activate
 
 n_epochs=3000
 

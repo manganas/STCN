@@ -406,7 +406,7 @@ def train(para):
 
     cur_skip = 5  # hardcoded here!!! Look into vosloader for init value
 
-    print(current_epoch, total_epoch)
+    print(f"Starting epoch: {current_epoch}, Total epochs: {total_epoch}")
 
     # Need this to select random bases in different workers
     np.random.seed(np.random.randint(2**30 - 1) + local_rank * 100)
