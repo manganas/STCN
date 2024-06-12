@@ -60,7 +60,7 @@ def train(para):
     """
     Initial setup
     """
-    seed = 14159265 + 666
+    seed = 14159265
 
     # Init distributed environment
     distributed.init_process_group(backend="nccl")
@@ -341,6 +341,7 @@ def train(para):
     print(
         "Number of training epochs (the last epoch might not complete): ", total_epoch
     )
+
     if para["stage"] != 0:
         increase_skip_epoch = [round(total_epoch * f) for f in increase_skip_fraction]
         # Skip will only change after an epoch, not in the middle
@@ -350,15 +351,16 @@ def train(para):
         )
 
     # Online evaluation related
-    steps = 5
-    online_eval_dataset = DAVISTestDataset(davis_root, steps=steps)
-    # yv_root_online_val = path.join(path.expanduser(para["yv_root"]))
-    # online_eval_dataset = YouTubeTestDataset(yv_root_online_val, steps=steps)
-    online_eval_loader = DataLoader(
-        online_eval_dataset, batch_size=1, shuffle=False, num_workers=4
-    )
-    gt_annotations_path = path.join(davis_root, "Annotations", "480p")
-    # gt_annotations_path = path.join(yv_root_online_val, "train_480p", "Annotations")
+    if para["online_validation"]:
+        steps = para["online_validation_steps"]
+        online_eval_dataset = DAVISTestDataset(davis_root, steps=steps)
+        # yv_root_online_val = path.join(path.expanduser(para["yv_root"]))
+        # online_eval_dataset = YouTubeTestDataset(yv_root_online_val, steps=steps)
+        online_eval_loader = DataLoader(
+            online_eval_dataset, batch_size=1, shuffle=False, num_workers=4
+        )
+        gt_annotations_path = path.join(davis_root, "Annotations", "480p")
+        # gt_annotations_path = path.join(yv_root_online_val, "train_480p", "Annotations")
 
     # WANDB Setup
     exp_name = para["exp_name"]
@@ -374,12 +376,9 @@ def train(para):
     print(f"Iterations: {n_iter}, Epochs: {total_epoch}")
     print(f"Trainloader length: {len(train_loader)}, Iterations: {para['iterations']}")
 
-    print(davis_root)
-
-    ### Save image for debugging!
+    # ## Save image for debugging!
 
     # data = next(iter(train_loader))
-
     # for j in range(para["batch_size"]):
 
     #     for i in range(3):
@@ -401,12 +400,20 @@ def train(para):
     """
     Starts training
     """
-    best_val_iou = -1
-    best_j_mean = -1
+    # keep the 10 last saved models, when validation hapens. Not the same as the last model
+
+    save_per = 100
+    n_models_to_save = 10
+    last_online_validation_epochs = sorted(
+        [total_epoch - 1 - save_per * i for i in range(n_models_to_save)]
+    )
 
     cur_skip = 5  # hardcoded here!!! Look into vosloader for init value
 
     print(f"Starting epoch: {current_epoch}, Total epochs: {total_epoch}")
+    print(
+        f"Will save models for offline evaluation at epochs: {last_online_validation_epochs}"
+    )
 
     # Need this to select random bases in different workers
     np.random.seed(np.random.randint(2**30 - 1) + local_rank * 100)
@@ -452,25 +459,26 @@ def train(para):
             # print(f"Training f1: {train_f1 / (len(train_loader)) * b}")
 
             # Eval loop
-            val_total_loss = 0
-            val_iou = 0
-            val_f1 = 0
+            if para["validation_step"]:
+                val_total_loss = 0
+                val_iou = 0
+                val_f1 = 0
 
-            model.val()
-            for data in val_loader:
-                with torch.no_grad():
-                    losses = model.do_pass(data, total_iter, e)
+                model.val()
+                for data in val_loader:
+                    with torch.no_grad():
+                        losses = model.do_pass(data, total_iter, e)
 
-                # Log metrics
-                b, s, _, _, _ = data["gt"].shape
+                    # Log metrics
+                    b, s, _, _, _ = data["gt"].shape
 
-                val_total_loss += losses["total_loss"]
-                val_iou += losses["iou"]
-                val_f1 += losses["f1"]
+                    val_total_loss += losses["total_loss"]
+                    val_iou += losses["iou"]
+                    val_f1 += losses["f1"]
 
                 # run davis validation iou for every 5th frame or part of videos
 
-            if e % 100 == 0:
+            if e % 100 == 0 and para["online_validation"]:
                 ious_mean, fs_mean = online_davis_eval(
                     online_eval_loader, model.STCN.module, gt_annotations_path
                 )
@@ -492,6 +500,9 @@ def train(para):
                         "Current max skip": cur_skip,
                     }
                 )
+
+                model.save_checkpoint(total_iter, e)
+
             elif wandb_log and local_rank == 0:
                 wandb.log(
                     {
@@ -509,18 +520,19 @@ def train(para):
             #     model.save_best_model(exp_name)
             #     print(f"saved best model with val iou: {best_val_iou}")
 
-            #######
-            # break  #### <+++++++++++++++++++++++++++++++
+            if e in last_online_validation_epochs:  # and local_rank == 0:
+                model.save_model(exp_name, e)
 
     finally:
 
         if wandb_log and local_rank == 0:
 
-            ious_mean, fs_mean = online_davis_eval(
-                online_eval_loader, model.STCN.module, gt_annotations_path
-            )
+            if para["online_validation"]:
+                ious_mean, fs_mean = online_davis_eval(
+                    online_eval_loader, model.STCN.module, gt_annotations_path
+                )
 
-            final_mean = (ious_mean + fs_mean) / 2.0
+                final_mean = (ious_mean + fs_mean) / 2.0
 
             wandb.log(
                 {

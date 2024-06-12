@@ -1,9 +1,9 @@
 #!/bin/sh
-#BSUB -q gpuv100
+#BSUB -q gpua100
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -J davis_pretraining
-#BSUB -n 4
-#BSUB -W 24:00
+#BSUB -J davis_1_all_staticNoCoco
+#BSUB -n 8
+#BSUB -W 48:00
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=12GB]"
 #BSUB -o logs/%J.out
@@ -16,35 +16,24 @@ module swap cuda/11.6
 
 source /work3/s220493/venv/bin/activate
 
-n_epochs=3000
+n_epochs=6000
 
-augm_p=[0]
 davis_part=1
 yv_part=0
 
-stage=0
-
-save_model_path="/work3/s220493/saves/comparison/"
-exp_name="davis_static_pretraining"
+save_model_path="/work3/s220493/saves/augmentations_static_no_coco/"
+exp_name="davis-$davis_part-all-static-no-coco"
 load_model="${save_model_path}checkpoint_${exp_name}_checkpoint.pth"
 
-wandb_log=False
-validation_step=False
-online_validation=False
-
-
-# exp_simple_davis or exp1
 augmentations=exp_multi_data
-davis_root="/work3/s220493/DAVIS/2017/trainval"
+davis_root="/work3/s220493/DAVIS"
+augm_datasets=['fss','ecssd','BIG_small','DUTS-TE','DUTS-TR','HRSOD_small']
+
 torchrun --nproc_per_node=1 --standalone train.py exp_name=$exp_name\
- n_epochs=$n_epochs augmentations.augmentation_p=$augm_p\
+ n_epochs=$n_epochs\
  davis_root=$davis_root \
- stage=$stage \
  save_model_path=$save_model_path \
  load_model=$load_model \
  davis_part=$davis_part \
  yt_vos_part=$yv_part \
- wandb_log=$wandb_log \
- validation_step=$validation_step \
- online_validation=$online_validation
-
+ +augmentations.augmentation_datasets=$augm_datasets

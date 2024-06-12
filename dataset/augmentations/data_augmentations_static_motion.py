@@ -387,14 +387,28 @@ class StaticImagesAugmentor:
 
     def get_augmentation_data(self, davis_video_name: str) -> tuple[list[Image.Image]]:
 
+        # For rescaling, use another davis video
+        j = np.random.randint(low=0, high=len(self.davis_video_names))
+        davis_name_rescaling = self.davis_video_names[j]
+
+        davis_vid_name_rescale, instance_rescale = self._get_davis_video_name_instance(
+            davis_name_rescaling
+        )
+
+        davis_mask_rescale = Image.open(
+            self.davis_annotations.joinpath(davis_vid_name_rescale, "00000.png")
+        ).convert("P")
+
+        davis_mask_rescale = np.asarray(davis_mask_rescale)
+        davis_mask_tmp_rescale = np.zeros_like(davis_mask_rescale)
+        davis_mask_tmp_rescale[davis_mask_rescale == instance_rescale] = 1
+
+        # For fake motion generation
         davis_vid_name, instance = self._get_davis_video_name_instance(davis_video_name)
         offsets_scales, resize_shape_h_w = self._sample_davis_video(
             davis_vid_name, instance
         )
         static_frame, static_mask = self._get_static_data(resize_shape_h_w)
-
-        # rescale the object so that the relative size distribution is similar
-        # to davis
 
         davis_mask = Image.open(
             self.davis_annotations.joinpath(davis_vid_name, "00000.png")
@@ -403,8 +417,10 @@ class StaticImagesAugmentor:
         davis_mask_tmp = np.zeros_like(davis_mask)
         davis_mask_tmp[davis_mask == instance] = 1
 
+        # Rescale
+
         static_mask, static_frame = rescale_mask(
-            davis_mask_tmp, static_mask, static_frame
+            davis_mask_tmp_rescale, static_mask, static_frame
         )
 
         # generate fake motion

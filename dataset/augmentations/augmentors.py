@@ -231,9 +231,11 @@ class StaticAugmentor:
 
         self.max_jump = 5
 
-        # Use all images
-        self.all_images = sorted(list(root_dir.glob("*.jpg")))
-        self.all_masks = sorted(list(root_dir.glob("*.png")))
+        # Use all images. NOT USED apart from assertion!
+        self.all_images = sorted(list(root_dir.glob("**/*.jpg")))
+        self.all_masks = sorted(list(root_dir.glob("**/*.png")))
+
+        print(f"Static dataset wit {len(self.all_images)} images.")
 
         assert len(self.all_images) == len(
             self.all_masks

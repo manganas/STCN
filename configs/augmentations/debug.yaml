@@ -1,9 +1,8 @@
 # Augmentation probability
-augmentation_p: [0.75, 0.5, 0.25]
+augmentation_p: [0.75]
 
 # Datasets
-augmentation_datasets: ['yt', 'davis', 'fss', 'ecssd', 'BIG_small','DUTS-TE', 'DUTS-TR', 'HRSOD_small', 'coco']
-augm_datasets_paths: ['']
+augmentation_datasets: ['davis']
 
 # Tranformations for new mask params
 
@@ -33,7 +32,4 @@ third_frame_p: 0.0
 
 # Apply further transformations, from STCN
 apply_transf_p: 1.0
-
-
-
 

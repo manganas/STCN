@@ -1,7 +1,7 @@
 #!/bin/sh
 #BSUB -q gpua100
-#BSUB -gpu "num=2:mode=exclusive_process"
-#BSUB -J warmup_augm_2000c
+#BSUB -gpu "num=1:mode=exclusive_process"
+#BSUB -J onlyDavisStage0
 #BSUB -n 8
 #BSUB -W 48:00
 #BSUB -R "span[hosts=1]"
@@ -16,30 +16,24 @@ module swap cuda/11.6
 
 source /work3/s220493/venv/bin/activate
 
-n_epochs=6000
+n_epochs=3000
 
 davis_part=1
-yv_part=0.56
+yv_part=0
 
+save_model_path="/work3/s220493/saves/from_pretrained/davis_only"
+exp_name="davis-$davis_part-only-davis"
+load_network="/work3/s220493/saves/STCN_stage0.pth"
 
-
-# exp_simple_davis or exp1
 augmentations=exp_multi_data
 davis_root="/work3/s220493/DAVIS"
 augm_datasets=['davis']
-augm_p=[0.75]
 
-save_model_path="/work3/s220493/saves/warmup/"
-exp_name="warmup_davis_$davis_part-yt_$yv_part-no_augm"
-load_model="${save_model_path}checkpoint_${exp_name}_checkpoint.pth"
-
-
-torchrun --nproc_per_node=2 --standalone train.py exp_name=$exp_name\
+torchrun --nproc_per_node=1 --standalone train.py exp_name=$exp_name\
  n_epochs=$n_epochs\
  davis_root=$davis_root \
  save_model_path=$save_model_path \
+ load_network=$load_network \
  davis_part=$davis_part \
  yt_vos_part=$yv_part \
- load_model=$load_model \
- +augmentations.augmentation_datasets=$augm_datasets \
- +augmentations.augmentation_p=$augm_p
+ augmentations.augmentation_datasets=$augm_datasets

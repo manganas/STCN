@@ -23,6 +23,13 @@ def get_augmentation_datasets_paths(augmentation_datasets: list[str]) -> dict[st
     for dataset in augmentation_datasets:
         if dataset in available_datasets.keys():
             results[dataset] = Path(available_datasets[dataset])
+        else:
+            # check if the path exists and has content. Now what content it is, we are adults
+            if Path(dataset).is_dir() and any(Path(dataset).iterdir()):
+                results[dataset] = Path(dataset)
+                print(f"Using data from {dataset}")
+            else:
+                print(f"{dataset} not found or is empty.")
 
     print(f"{len(results)} accepted datasets:")
     for k, v in results.items():

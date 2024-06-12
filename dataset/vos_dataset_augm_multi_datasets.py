@@ -329,6 +329,12 @@ class VOSDataset(Dataset):
                     images_[i] = this_im
                     masks_[i] = this_gt
 
+                    ####
+                    # ####
+                    # if i == 0:
+                    #     this_im.save(f"./plots/im_{np.random.randint(0,1500)}.jpg")
+                    ####
+
                 ###
 
             for i in range(len(frames_idx)):

@@ -1,7 +1,7 @@
 #!/bin/sh
 #BSUB -q gpuv100
 #BSUB -gpu "num=2:mode=exclusive_process"
-#BSUB -J davis_cocowarmupc
+#BSUB -J davis_daviswarmupc
 #BSUB -n 8
 #BSUB -W 24:00
 #BSUB -R "span[hosts=1]"
@@ -21,18 +21,19 @@ n_epochs=6000
 davis_part=1
 
 
+save_model_path="/work3/s220493/saves/warmup_vs_skip/"
 
-# exp_simple_davis or exp1
 augmentations=exp_multi_data
-augm_datasets=['coco']
-exp_name="davis-coco-warmup"
-load_model="checkpoint_$exp_name\_checkpoint.pth"
+augm_datasets=['davis']
+exp_name="davis-davis-warmup"
+load_model="${save_model_path}checkpoint_${exp_name}_checkpoint.pth"
 augm_probs=[0.75,0.5,0.25]
+
 
 torchrun --nproc_per_node=2 --standalone train.py exp_name=$exp_name\
  n_epochs=$n_epochs\
- save_model_path='/work3/s220493/saves/warmup_vs_skip/' \
+ save_model_path=$save_model_path \
  davis_part=$davis_part \
  load_model=$load_model \
  augmentations.augmentation_p=$augm_probs \
- +augmentations.augmentation_datasets=$augm_datasets \
+ +augmentations.augmentation_datasets=$augm_datasets

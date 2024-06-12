@@ -260,6 +260,16 @@ class STCNModel:
 
         self.save_checkpoint(it, current_epoch)
 
+    def save_model(self, it, current_epoch):
+        if self.save_path is None:
+            print("Saving has been disabled.")
+            return
+
+        os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
+        model_path = self.save_path + (f"_{current_epoch}.pth")
+        torch.save(self.STCN.module.state_dict(), model_path)
+        print("Model saved to %s." % model_path)
+
     def save_best_model(self, exp_name: str):
         if self.save_path is None:
             print("Saving has been disabled.")

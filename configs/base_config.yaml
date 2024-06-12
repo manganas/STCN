@@ -25,8 +25,8 @@ steps: [250000]
 
 # Training parameters
 num_workers: 8
-batch_size: 8
-iterations: 300000 # corresponds to 2.5k epochs. Use the next entry to set the number of epochs
+batch_size: 16 #8
+iterations: 3000000 # corresponds to 2.5k epochs. Use the next entry to set the number of epochs
 n_epochs: 1000
 gamma: 0.1
 lr: 0.00001
@@ -53,6 +53,13 @@ davis_part: 1
 yt_vos_part: 0
 
 
+######################################
+## Validation and online validation ##
+######################################
+validation_step: True
+online_validation: True
+online_validation_steps: 5
+
 ### Augmentations
 defaults:
-    - augmentations: exp2
+    - augmentations: exp_multi_data
