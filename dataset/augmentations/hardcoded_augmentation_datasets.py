@@ -17,6 +17,7 @@ def get_augmentation_datasets_paths(augmentation_datasets: list[str]) -> dict[st
         "DUTS-TE": "/work3/s220493/static/DUTS-TE/",
         "BIG_small": "/work3/s220493/static/BIG_small/",
         "coco": "/work3/s220493/coco/",
+        "yt": "/work3/s220493/YouTube/train_480p/",
     }
 
     results = {}
