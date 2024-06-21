@@ -39,7 +39,7 @@ train_static:
 	
 .PHONY: train_davis
 train_davis:
-	CUDA_VISIBLE_DEVICES=2 OMP_NUM_THREADS=4 torchrun --nnodes=1 --rdzv-endpoint=localhost:29501 --nproc_per_node=1 train.py stage=2 davis_root='/work3/s220493/DAVIS' wandb_log=False augmentations=exp_multi_data
+	OMP_NUM_THREADS=4 torchrun --nnodes=1 --rdzv-endpoint=localhost:29501 --nproc_per_node=1 train.py stage=2 davis_root='/work3/s220493/DAVIS' wandb_log=False augmentations=exp_multi_data
 	
 	
 	

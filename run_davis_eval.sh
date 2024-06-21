@@ -6,15 +6,15 @@ source /work3/s220493/venv/bin/activate
 
 ## Saved model relevant
 base_path="/work3/s220493/saves/"
-augm_type_dir="generated/sdxl-turbo/mistral/"
-file_part="checkpoint_davis-1-generated-mistral_"
+augm_type_dir="generated/sdxl-turbo/4_steps/An_image_of_a_{object}./"
+file_part="checkpoint_davis-1-generated_"
 
 STCN_path="/zhome/39/c/174709/git/STCN_mine"
 davis2017_path="/zhome/39/c/174709/git/davis2017-evaluation"
 
 
 ## Output files relevant
-output_path="outputs/generated/sdxl_turbo_mistral/all_clases"
+output_path="outputs/generated/sdxl_turbo_4_steps/gen_"
 
 cleanup_names=("bike-packing" "blackswan" "bmx-trees" "breakdance" "camel" "car-roundabout" "car-shadow" "cows" "dance-twirl" "dog" "dogs-jump" "drift-chicane" "drift-straight" "goat" "gold-fish" "horsejump-high" "india" "judo" "kite-surf" "lab-coat" "libby" "loading" "mbike-trick" "motocross-jump" "paragliding-launch" "parkour" "pigs" "scooter-black" "shooting" "soapbox")
 

@@ -12,7 +12,7 @@ def get_augmentation_datasets_paths(augmentation_datasets: list[str]) -> dict[st
         "davis": "/work3/s220493/DAVIS/2017/trainval",
         "fss": "/work3/s220493/static/fss/",
         "ecssd": "/work3/s220493/static/ecssd/",
-        "HRSOD": "/work3/s220493/static/HRSOD_small/",
+        "HRSOD_small": "/work3/s220493/static/HRSOD_small/",
         "DUTS-TR": "/work3/s220493/static/DUTS-TR/",
         "DUTS-TE": "/work3/s220493/static/DUTS-TE/",
         "BIG_small": "/work3/s220493/static/BIG_small/",

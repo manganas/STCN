@@ -2,8 +2,10 @@
 augmentation_p: [0.75, 0.5, 0.25]
 
 # Datasets
-augmentation_datasets: ['yt', 'davis', 'fss', 'ecssd', 'BIG_small','DUTS-TE', 'DUTS-TR', 'HRSOD_small', 'coco']
-augm_datasets_paths: ['']
+# augmentation_datasets: ['yt', 'davis', 'fss', 'ecssd', 'BIG_small','DUTS-TE', 'DUTS-TR', 'HRSOD_small', 'coco']
+# augmentation_datasets: ['davis', 'fss', 'ecssd', 'BIG_small','DUTS-TE', 'DUTS-TR', 'HRSOD_small', 'coco']
+augmentation_datasets: ['davis', 'fss', 'ecssd','BIG_small', 'DUTS-TE', 'DUTS-TR', 'HRSOD_small']
+dataset_probabilities: [0.5]
 
 # Tranformations for new mask params
 

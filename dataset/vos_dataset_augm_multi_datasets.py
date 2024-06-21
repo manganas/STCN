@@ -18,6 +18,8 @@ from dataset.augmentations.hardcoded_augmentation_datasets import (
     get_augmentation_datasets_paths,
 )
 
+import omegaconf
+
 
 class VOSDataset(Dataset):
     """
@@ -202,8 +204,17 @@ class VOSDataset(Dataset):
         davis_root_path = para["davis_root"]
         davis_path = os.path.join(davis_root_path, "2017", "trainval")
 
+        try:
+            dataset_probabilities = augmentation_params["dataset_probabilities"]
+        except omegaconf.errors.ConfigKeyError as e:
+            print(e)
+            print(
+                "Dataset probabilities entry in hydra config not found. Setting to equal probabilities for every dataset for uniform distribution sampling."
+            )
+            dataset_probabilities = None
+
         self.augmentation_data_generator = AugmentationDataGenerator(
-            augmentation_datasets_dict, davis_path
+            augmentation_datasets_dict, davis_path, dataset_probabilities
         )
 
         # create the frame_combiner object

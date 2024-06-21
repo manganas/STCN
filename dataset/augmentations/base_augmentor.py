@@ -1,4 +1,6 @@
 from pathlib import Path
+
+from numpy.typing import ArrayLike
 import numpy as np
 from PIL import Image
 
@@ -44,17 +46,37 @@ class AugmentationDataGenerator:
         return result
 
     # def __init__(self, datasets: dict[str:Path], probabilities: list[float] = None):
-    def __init__(self, datasets: dict[str:Path], davis_root: Path):
+    def __init__(
+        self,
+        datasets: dict[str:Path],
+        davis_root: Path,
+        probabilities: ArrayLike | None = None,
+    ):
 
         self.datasets = datasets
 
-        # if probabilities:
-        #     assert len(datasets) == len(
-        #         probabilities
-        #     ), "Not the same number of probabilities and datasets for augmentation passed!"
-        #     self.probabilities = probabilities
-        # else:
-        #     self.probabilities = [1 // len(datasets)] * len(datasets)
+        if probabilities:
+
+            if len(datasets) > len(probabilities):
+                # fill in the rest of probs so that they add to 1
+                tmp_sum = np.array(probabilities).sum()
+                rest_p = 1 - tmp_sum
+                n_datasets_p = len(datasets) - len(probabilities)
+                probabilities_ = [i for i in probabilities]  # copy the initial probs
+                for _ in range(n_datasets_p):
+                    probabilities_.append(rest_p / n_datasets_p)
+
+                probabilities = probabilities_[:]
+
+            else:
+                print(
+                    "More probabilities than datasets! Will probably raise exception later"
+                )
+                # could do sth, but it is more complex and not as worthy for now
+
+            self.probabilities = np.array(probabilities)
+        else:
+            self.probabilities = None
 
         self.augmentors = {}
 
@@ -85,7 +107,10 @@ class AugmentationDataGenerator:
             replace = True
 
         self._selected_datasets = np.random.choice(
-            list(self.datasets.keys()), size=num_of_augmentations, replace=replace
+            list(self.datasets.keys()),
+            size=num_of_augmentations,
+            replace=replace,
+            p=self.probabilities,
         )
         return
 
