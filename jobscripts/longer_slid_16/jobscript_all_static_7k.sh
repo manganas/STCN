@@ -1,11 +1,12 @@
 #!/bin/sh
 #BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -J davis_1_onlyDavis7k
+#BSUB -J davis_1_all_static_7k
 #BSUB -n 8
 #BSUB -W 24:00
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=12GB]"
+#BSUB -R "select[gpu32gb]"
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
 echo "Running script..."
@@ -21,13 +22,13 @@ n_epochs=7000
 davis_part=1
 yv_part=0
 
-save_model_path="/work3/s220493/saves/augmentations_only_davis/"
-exp_name="davis-$davis_part-only-davis"
+save_model_path="/work3/s220493/saves/augmentations_static/"
+exp_name="davis-$davis_part-yv-$yv_part-all-static"
 load_model="${save_model_path}checkpoint_${exp_name}_checkpoint.pth"
 
 augmentations=exp_multi_data
 davis_root="/work3/s220493/DAVIS"
-augm_datasets=['davis']
+augm_datasets=['fss','ecssd','BIG_small','DUTS-TE','DUTS-TR','HRSOD_small','coco']
 
 torchrun --nproc_per_node=1 --standalone train.py exp_name=$exp_name\
  n_epochs=$n_epochs\

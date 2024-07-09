@@ -1,12 +1,11 @@
 #!/bin/sh
-#BSUB -q gpuv100
+#BSUB -q gpua100
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -J generatedDatasetMistral
+#BSUB -J generatedDatasetMistral7k
 #BSUB -n 8
-#BSUB -W 24:00
+#BSUB -W 48:00
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=12GB]"
-#BSUB -R "select[gpu32gb]"
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
 echo "Running script..."
@@ -17,7 +16,8 @@ module swap cuda/11.6
 
 source /work3/s220493/venv/bin/activate
 
-n_epochs=3000
+# #BSUB -R "select[gpu32gb]"
+n_epochs=7000
 
 batch_size=8
 
@@ -27,7 +27,7 @@ davis_part=1
 yv_part=0
 
 save_model_path="/work3/s220493/saves/generated/sdxl-turbo/mistal_nltk_simple_pipeline/"
-exp_name="davis-$davis_part-generated-mistral_nltk_simple"
+exp_name="davis-$davis_part-generated-mistral_nltk_simple_7k"
 # load_network="/work3/s220493/saves/STCN_stage0.pth"
 load_model="${save_model_path}checkpoint_${exp_name}_checkpoint.pth"
 

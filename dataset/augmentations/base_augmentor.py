@@ -57,7 +57,7 @@ class AugmentationDataGenerator:
 
         if probabilities:
 
-            if len(datasets) > len(probabilities):
+            if len(datasets) >= len(probabilities):
                 # fill in the rest of probs so that they add to 1
                 tmp_sum = np.array(probabilities).sum()
                 rest_p = 1 - tmp_sum
@@ -73,10 +73,18 @@ class AugmentationDataGenerator:
                     "More probabilities than datasets! Will probably raise exception later"
                 )
                 # could do sth, but it is more complex and not as worthy for now
+                raise NotImplementedError
 
             self.probabilities = np.array(probabilities)
+
+            print("Augmentation dataset weighted probabilities:")
+
+            for dataset_, prob_ in zip(self.datasets, self.probabilities):
+                print(dataset_, ": ", prob_)
+
         else:
             self.probabilities = None
+            print("Not weighted probabilities for dataset augmentations.")
 
         self.augmentors = {}
 
@@ -90,9 +98,17 @@ class AugmentationDataGenerator:
                 self.augmentors["coco"] = COCOAugmentor(datasets[dataset], davis_root)
             else:
 
-                self.augmentors[dataset] = StaticAugmentor(
-                    datasets[dataset], davis_root
-                )
+                if (
+                    Path(datasets[dataset]).is_dir()
+                    and len(list(Path(datasets[dataset]).glob("**/*.png"))) > 0
+                ):
+                    self.augmentors[dataset] = StaticAugmentor(
+                        datasets[dataset], davis_root
+                    )
+                else:
+                    raise FileNotFoundError(
+                        f"Directory {datasets[dataset]} not found or is empty."
+                    )
 
         ##### Varying members per __getitem__ call
         self._selected_datasets = []

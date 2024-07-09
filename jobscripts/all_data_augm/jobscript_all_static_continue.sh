@@ -1,7 +1,7 @@
 #!/bin/sh
 #BSUB -q gpuv100
 #BSUB -gpu "num=2:mode=exclusive_process"
-#BSUB -J davis_1_all_staticc
+#BSUB -J davis_1_all_static_7k
 #BSUB -n 8
 #BSUB -W 24:00
 #BSUB -R "span[hosts=1]"
@@ -16,7 +16,7 @@ module swap cuda/11.6
 
 source /work3/s220493/venv/bin/activate
 
-n_epochs=6000
+n_epochs=7000
 
 davis_part=1
 yv_part=0
@@ -36,4 +36,4 @@ torchrun --nproc_per_node=2 --standalone train.py exp_name=$exp_name\
  load_model=$load_model \
  davis_part=$davis_part \
  yt_vos_part=$yv_part \
- +augmentations.augmentation_datasets=$augm_datasets
+ augmentations.augmentation_datasets=$augm_datasets

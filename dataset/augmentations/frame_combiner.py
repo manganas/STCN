@@ -112,9 +112,11 @@ class FrameCombiner:
     def reset(self, max_n_classes_per_frame: int = 7) -> None:
         self.__chosen_instances = None
         self.max_n_classes_per_frame = max_n_classes_per_frame
+        self._in_foreground = np.random.rand() >= self.foreground_p
 
     def reset_chosen_instances(self) -> None:
         self.__chosen_instances = None
+        self._in_foreground = np.random.rand() >= self.foreground_p
 
     def apply_transformations(
         self,

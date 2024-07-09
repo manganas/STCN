@@ -1,7 +1,7 @@
 #!/bin/sh
 #BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -J davisNoAugm3k
+#BSUB -J davis50coco25static
 #BSUB -n 8
 #BSUB -W 24:00
 #BSUB -R "span[hosts=1]"
@@ -17,7 +17,7 @@ module swap cuda/11.6
 
 source /work3/s220493/venv/bin/activate
 
-n_epochs=3000
+n_epochs=7000
 
 batch_size=8
 
@@ -26,17 +26,19 @@ batch_size=8
 davis_part=1
 yv_part=0
 
-save_model_path="/work3/s220493/saves/davis_again/from_scratch/"
-exp_name="davis-$davis_part-davis_no_augm_3k"
+save_model_path="/work3/s220493/saves/weighted/"
+exp_name="davis-$davis_part-half_davis_quarter_coco_static"
 # load_network="/work3/s220493/saves/STCN_stage0.pth"
 load_model="${save_model_path}checkpoint_${exp_name}_checkpoint.pth"
 
 
 augmentations=exp_multi_data
 davis_root="/work3/s220493/DAVIS"
-augm_datasets=[]
-augm_p=[0]
+augm_datasets=['davis','coco','fss','ecssd','BIG_small','DUTS-TE','DUTS-TR','HRSOD_small']
+dataset_probabilities=[0.5,0.25]
 
+echo $augm_datasets
+echo $dataset_probabilities
 
 torchrun --nproc_per_node=1 --standalone train.py exp_name=$exp_name\
  n_epochs=$n_epochs\
@@ -46,4 +48,4 @@ torchrun --nproc_per_node=1 --standalone train.py exp_name=$exp_name\
  davis_part=$davis_part \
  yt_vos_part=$yv_part \
  augmentations.augmentation_datasets=$augm_datasets \
- augmentations.augmentation_p=$augm_p
+ augmentations.dataset_probabilities=$dataset_probabilities

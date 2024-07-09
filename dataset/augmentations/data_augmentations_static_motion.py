@@ -29,7 +29,11 @@ def rescale_mask(
     _, _, bbox_h_1, bbox_w_1 = get_bbox_box_width(np.array(prototype_mask))
 
     # resize new mask
-    rmin, cmin, rmax, cmax = get_bbox_start_end(to_transform_mask)
+    try:
+        rmin, cmin, rmax, cmax = get_bbox_start_end(to_transform_mask)
+    except IndexError:
+        return to_transform_mask, to_transform_frame
+
     new_mask = Image.fromarray(to_transform_mask)
     new_mask = np.array(new_mask.crop((cmin, rmin, cmax, rmax)))
 
@@ -37,7 +41,11 @@ def rescale_mask(
 
     resize_h, resize_w = int(scale * new_mask.shape[0]), int(scale * new_mask.shape[1])
 
-    new_mask = np.array(Image.fromarray(new_mask).resize((resize_w, resize_h)))
+    try:
+        new_mask = np.array(Image.fromarray(new_mask).resize((resize_w, resize_h)))
+    except ValueError as e:
+        print(e)
+        return to_transform_mask, to_transform_frame
 
     new_mask_tmp = np.zeros_like(prototype_mask)
 
@@ -252,6 +260,43 @@ class StaticImagesAugmentor:
 
         return vid_name, i
 
+    def _center_mask_frame(
+        self, mask: NDArray, frame: NDArray
+    ) -> tuple[NDArray, NDArray]:
+
+        assert (
+            len(np.unique(mask)[1:]) == 1
+        ), "More or fewer objects than 1 in mask to be centered"
+
+        # where is the object? Bounding box
+        rmin, cmin, rmax, cmax = get_bbox_start_end(mask)
+
+        h0, w0 = mask.shape[:2]
+
+        mid_row, mid_col = h0 // 2, w0 // 2
+        mid_bbox_row, mid_bbox_col = (rmin + rmax) // 2, (cmin + cmax) // 2
+
+        th = mid_row - mid_bbox_row + np.random.randint(-50, 50)
+        tw = mid_col - mid_bbox_col + np.random.randint(-50, 50)
+
+        T = np.array([[1, 0, tw], [0, 1, th], [0, 0, 1]])
+        T_inv = np.linalg.inv(T)
+
+        og_mask = Image.fromarray(mask)
+        og_mask_centered = og_mask.transform(
+            og_mask.size, Image.Transform.AFFINE, T_inv.flatten()[:6]
+        )
+
+        og_frame = Image.fromarray(frame)
+        og_frame_centered = og_frame.transform(
+            og_frame.size, Image.Transform.AFFINE, T_inv.flatten()[:6]
+        )
+
+        og_mask_centered = np.array(og_mask_centered)
+        og_frame_centered = np.array(og_frame_centered)
+
+        return og_mask_centered, og_frame_centered
+
     def _sample_davis_video(self, davis_vid_name: str, instance: int) -> tuple[NDArray]:
         # Initialize scale, starting point
 
@@ -343,6 +388,8 @@ class StaticImagesAugmentor:
         static_frame = np.array(static_frame)
         static_mask = np.array(static_mask)
 
+        static_mask, static_frame = self._center_mask_frame(static_mask, static_frame)
+
         offset_row, offset_col, scale_h, scale_w = offsets_scales
 
         for i in range(len(offsets_scales[0])):
@@ -359,24 +406,57 @@ class StaticImagesAugmentor:
             ):
                 offset_row[i] = -offset_row[i]
 
-            affine_transf = (
-                1,  # * scale_w[i],
-                0,
-                -offset_col[i] - 0 * static_frame.shape[1],
-                0,
-                1,  # * scale_h[i],
-                -offset_row[i] - 0 * static_frame.shape[0],
+            # affine_transf = (
+            #     1,  # * scale_w[i],
+            #     0,
+            #     -offset_col[i] - 0 * static_frame.shape[1],
+            #     0,
+            #     1,  # * scale_h[i],
+            #     -offset_row[i] - 0 * static_frame.shape[0],
+            # )
+
+            scale_w_ = scale_w[i]
+            if scale_w_ <= 1e-1:
+                if i > 0:
+                    scale_w_ = scale_w[i - 1]
+                else:
+                    scale_w_ = 1
+
+            scale_h_ = scale_h[i]
+            if scale_h_ <= 1e-1:
+                if i > 0:
+                    scale_h_ = scale_h[i - 1]
+                else:
+                    scale_h_ = 1
+
+            T = np.array(
+                [
+                    [scale_w_ * 0 + 1, 0, offset_col[i]],
+                    [0, scale_h_ * 0 + 1, offset_row[i]],
+                    [0, 0, 1],
+                ]
             )
+
+            T_inv = np.linalg.inv(T)
+
             new_mask = Image.fromarray(static_mask)
+
+            # new_mask = new_mask.transform(
+            #     new_mask.size, Image.AFFINE, data=affine_transf, fill=0
+            # )
             new_mask = new_mask.transform(
-                new_mask.size, Image.AFFINE, data=affine_transf, fill=0
+                new_mask.size, Image.AFFINE, data=T_inv.flatten()[:6], fill=0
             )
             new_mask = np.array(new_mask)
 
             new_frame = Image.fromarray(static_frame)
+            # new_frame = new_frame.transform(
+            #     new_frame.size, Image.AFFINE, data=affine_transf, fill=0
+            # )
             new_frame = new_frame.transform(
-                new_frame.size, Image.AFFINE, data=affine_transf, fill=0
+                new_frame.size, Image.AFFINE, data=T_inv.flatten()[:6], fill=0
             )
+
             new_frame = np.array(new_frame)
             new_frame[new_mask <= 0] = 0
 
