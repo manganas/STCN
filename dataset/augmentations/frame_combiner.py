@@ -239,6 +239,13 @@ class FrameCombiner:
 
         resize_w, resize_h = kwargs["resize_w"], kwargs["resize_h"]
 
+        ## Instead of the line above
+        # w_og, h_og = og_frame.size
+        # w_augm, h_augm = augm_frame.size
+
+        # resize_w = min(w_og, w_augm)
+        # resize_h = min(h_og, h_augm)
+
         # Reshape all
         frame_og = og_frame.resize((resize_w, resize_h))
         mask_og = og_mask.resize((resize_w, resize_h))
