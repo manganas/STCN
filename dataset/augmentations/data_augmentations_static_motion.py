@@ -264,9 +264,12 @@ class StaticImagesAugmentor:
         self, mask: NDArray, frame: NDArray
     ) -> tuple[NDArray, NDArray]:
 
-        assert (
-            len(np.unique(mask)[1:]) == 1
-        ), "More or fewer objects than 1 in mask to be centered"
+        if len(np.unique(mask)[1:]) < 1:
+            print("Fewer objects than 1 in mask to be centered")
+            return mask, frame
+
+        if len(np.unique(mask)[1:]) > 1:
+            print("More or fewer objects than 1 in mask to be centered")
 
         # where is the object? Bounding box
         rmin, cmin, rmax, cmax = get_bbox_start_end(mask)
@@ -431,7 +434,7 @@ class StaticImagesAugmentor:
 
             T = np.array(
                 [
-                    [scale_w_ * 0 + 1, 0, offset_col[i]],
+                    [scale_w_ * 0 + 1, 0, offset_col[i]],  # no scale tracking
                     [0, scale_h_ * 0 + 1, offset_row[i]],
                     [0, 0, 1],
                 ]

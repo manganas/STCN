@@ -25,8 +25,10 @@ class VOSTransformations:
             s = 0.1
 
         w, h = frame.size
-        w_s = int((1 + s) * w)
-        h_s = int((1 + s) * h)
+        # w_s = int((1 + s) * w)
+        # h_s = int((1 + s) * h)
+        w_s = int(s * w)
+        h_s = int(s * h)
 
         frame = frame.resize((w_s, h_s))
         mask = mask.resize((w_s, h_s))
@@ -105,6 +107,8 @@ class FrameCombiner:
 
         self._in_foreground = np.random.rand() >= self.foreground_p
 
+        self._transformation_parameters = None
+
         print(f"Select instances: {self.select_instances}")
         print(f"Foreground probability: {self.foreground_p}")
         print(f"Include_new_instances: {self.include_new_instances}")
@@ -117,6 +121,9 @@ class FrameCombiner:
     def reset_chosen_instances(self) -> None:
         self.__chosen_instances = None
         self._in_foreground = np.random.rand() >= self.foreground_p
+
+    def reset_transformation_parameters(self):
+        self._transformation_parameters = None
 
     def apply_transformations(
         self,
@@ -299,13 +306,24 @@ class FrameCombiner:
                 high=int(resize_h * translation_lim),
             )
 
-        transformation_options = {
-            "resize_w": resize_w,
-            "resize_h": resize_h,
-            "translation": (translation_w_lim, translation_h_lim),
-            "horizontal_p": horizontal_p,
-            "scale_factor": scale_factor,
-        }
+        if not self._transformation_parameters:
+            transformation_options = {
+                "resize_w": resize_w,
+                "resize_h": resize_h,
+                "translation": (translation_w_lim, translation_h_lim),
+                "horizontal_p": horizontal_p,
+                "scale_factor": scale_factor,
+            }
+
+            self._transformation_parameters = transformation_options
+
+        # transformation_options = {
+        #     "resize_w": resize_w,
+        #     "resize_h": resize_h,
+        #     "translation": (translation_w_lim, translation_h_lim),
+        #     "horizontal_p": horizontal_p,
+        #     "scale_factor": scale_factor,
+        # }
 
         this_im, this_gt = self.get_augmented_data_per_frame(
             original_im,
@@ -313,7 +331,8 @@ class FrameCombiner:
             new_im,
             new_gt,
             transformations_list,
-            **transformation_options,
+            # **transformation_options,
+            **self._transformation_parameters,
         )
 
         return this_im, this_gt

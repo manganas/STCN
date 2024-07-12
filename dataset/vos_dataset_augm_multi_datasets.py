@@ -319,6 +319,7 @@ class VOSDataset(Dataset):
 
             for augment_idx in range(n_augmentations):
                 self.combiner.reset_chosen_instances()
+                self.combiner.reset_transformation_parameters()
 
                 new_images, new_masks = (
                     self.augmentation_data_generator.get_augmentation_data(augment_idx)
