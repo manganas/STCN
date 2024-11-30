@@ -1,11 +1,12 @@
 #!/bin/sh
-#BSUB -q gpua100
+#BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -J generatedMistralSxl4_col_pose_20k
+#BSUB -J rerun_scale_0.5_2
 #BSUB -n 8
-#BSUB -W 12:00
+#BSUB -W 24:00
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=12GB]"
+#BSUB -R "select[gpu32gb]"
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
 echo "Running script..."
@@ -16,7 +17,7 @@ module swap cuda/11.6
 
 source /work3/s220493/venv/bin/activate
 
-n_epochs=7000
+n_epochs=2500
 
 batch_size=8
 
@@ -25,21 +26,23 @@ batch_size=8
 davis_part=1
 yv_part=0
 
-save_model_path="/work3/s220493/saves/generated/sdxl-turbo/mistal_sdxl_4_pose_col_20k/"
-exp_name="davis-$davis_part-generated-mistral_col_pose_20k"
+scale_min=0.5
+scale_max=2.0
+
+save_model_path="/work3/s220493/saves/hparams_rerun/scale_lims/"
+exp_name="davis-scale-lims-${scale_min}-${scale_max}"
 # load_network="/work3/s220493/saves/STCN_stage0.pth"
 load_model="${save_model_path}checkpoint_${exp_name}_checkpoint.pth"
 
 
-augmentations=exp_multi_data
+augmentations=rerun
 davis_root="/work3/s220493/DAVIS"
-augm_datasets=['/work3/s220493/Generated_datasets/generate_images_mistral_col_pose_20k/']
 
 torchrun --nproc_per_node=1 --standalone train.py exp_name=$exp_name\
  n_epochs=$n_epochs\
  davis_root=$davis_root \
  save_model_path=$save_model_path \
  load_model=$load_model \
- davis_part=$davis_part \
- yt_vos_part=$yv_part \
- augmentations.augmentation_datasets=$augm_datasets
+ augmentations.scale_factor_lower_lim=$scale_min \
+ augmentations.scale_factor_upper_lim=$scale_max \
+

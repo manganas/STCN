@@ -15,7 +15,7 @@ from dataset.range_transform import im_normalization
 from dataset.util import all_to_onehot
 
 
-class DAVISTestDataset(Dataset):
+class MOSETestDataset(Dataset):
     def __init__(
         self,
         root,
@@ -25,13 +25,9 @@ class DAVISTestDataset(Dataset):
         target_name=None,
     ):
         self.root = root
-        if resolution == 480:
-            res_tag = "480p"
-        else:
-            res_tag = "Full-Resolution"
-        self.mask_dir = path.join(root, "Annotations", res_tag)
-        self.mask480_dir = path.join(root, "Annotations", "480p")
-        self.image_dir = path.join(root, "JPEGImages", res_tag)
+
+        self.mask_dir = path.join(root, "Annotations")
+        self.image_dir = path.join(root, "JPEGImages")
         self.resolution = resolution
         _imset_dir = path.join(root, "ImageSets")
         _imset_f = path.join(_imset_dir, imset)
@@ -41,55 +37,42 @@ class DAVISTestDataset(Dataset):
         self.num_objects = {}
         self.shape = {}
         self.size_480p = {}
-        with open(path.join(_imset_f), "r") as lines:
-            for line in lines:
-                _video = line.rstrip("\n")
-                if target_name is not None and target_name != _video:
-                    continue
-                self.videos.append(_video)
-                self.num_frames[_video] = len(
-                    os.listdir(path.join(self.image_dir, _video))
-                )
-                _mask = np.array(
-                    Image.open(path.join(self.mask_dir, _video, "00000.png")).convert(
-                        "P"
-                    )
-                )
-                self.num_objects[_video] = np.max(_mask)
-                self.shape[_video] = np.shape(_mask)
-                _mask480 = np.array(
-                    Image.open(
-                        path.join(self.mask480_dir, _video, "00000.png")
-                    ).convert("P")
-                )
-                self.size_480p[_video] = np.shape(_mask480)
+
+        for _video in os.listdir(self.image_dir):
+            if target_name is not None and target_name != _video:
+                continue
+            self.videos.append(_video)
+            self.num_frames[_video] = len(os.listdir(path.join(self.image_dir, _video)))
+            _mask = np.array(
+                Image.open(path.join(self.mask_dir, _video, "00000.png")).convert("P")
+            )
+            self.num_objects[_video] = np.max(_mask)
+            self.shape[_video] = np.shape(_mask)
+
+            _mask = Image.open(path.join(self.mask_dir, _video, "00000.png")).convert(
+                "P"
+            )
+            tmp_img = transforms.Resize(
+                resolution, interpolation=InterpolationMode.NEAREST
+            )(_mask)
+
+            _mask480 = np.array(tmp_img)
+            self.size_480p[_video] = np.shape(_mask480)
 
         self.single_object = single_object
 
-        if resolution == 480:
-            self.im_transform = transforms.Compose(
-                [
-                    transforms.ToTensor(),
-                    im_normalization,
-                ]
-            )
-        else:
-            self.im_transform = transforms.Compose(
-                [
-                    transforms.ToTensor(),
-                    im_normalization,
-                    transforms.Resize(
-                        resolution, interpolation=InterpolationMode.BICUBIC
-                    ),
-                ]
-            )
-            self.mask_transform = transforms.Compose(
-                [
-                    transforms.Resize(
-                        resolution, interpolation=InterpolationMode.NEAREST
-                    ),
-                ]
-            )
+        self.im_transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                im_normalization,
+                transforms.Resize(resolution, interpolation=InterpolationMode.BICUBIC),
+            ]
+        )
+        self.mask_transform = transforms.Compose(
+            [
+                transforms.Resize(resolution, interpolation=InterpolationMode.NEAREST),
+            ]
+        )
 
     def __len__(self):
         return len(self.videos)
@@ -111,9 +94,9 @@ class DAVISTestDataset(Dataset):
 
             mask_file = path.join(self.mask_dir, video, "{:05d}.png".format(f))
             if path.exists(mask_file):
-                masks.append(
-                    np.array(Image.open(mask_file).convert("P"), dtype=np.uint8)
-                )
+                _mask = Image.open(mask_file).convert("P")
+                _mask = self.mask_transform(_mask)
+                masks.append(np.array(_mask, dtype=np.uint8))
             else:
                 # Test-set maybe?
                 masks.append(np.zeros_like(masks[0]))

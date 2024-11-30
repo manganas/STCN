@@ -11,14 +11,12 @@ import numpy as np
 from dataset.range_transform import im_normalization, im_mean
 from dataset.reseed import reseed
 
-from dataset.augmentations.base_augmentor import AugmentationDataGenerator
-from dataset.augmentations.frame_combiner import FrameCombiner, VOSTransformations
 
-from dataset.augmentations.hardcoded_augmentation_datasets import (
-    get_augmentation_datasets_paths,
-)
+## videomix modfications
+from pathlib import Path
+from dataset.augmentations.videomix import VideoMixDataset, VideoMixer, VideoMixMode
 
-import omegaconf
+##
 
 
 class VOSDataset(Dataset):
@@ -67,10 +65,6 @@ class VOSDataset(Dataset):
             % (len(self.videos), len(vid_list), im_root)
         )
 
-        # Image dimensions
-        self.resize_h = 384
-        self.resize_w = 384
-
         # These set of transform is the same for im/gt pairs, but different among the 3 sampled frames
         self.pair_im_lone_transform = transforms.Compose(
             [
@@ -114,7 +108,7 @@ class VOSDataset(Dataset):
                 [
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomResizedCrop(
-                        (self.resize_h, self.resize_w),
+                        (384, 384),
                         scale=(0.25, 1.00),
                         interpolation=InterpolationMode.BICUBIC,
                     ),
@@ -125,7 +119,7 @@ class VOSDataset(Dataset):
                 [
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomResizedCrop(
-                        (self.resize_h, self.resize_w),
+                        (384, 384),
                         scale=(0.25, 1.00),
                         interpolation=InterpolationMode.NEAREST,
                     ),
@@ -136,7 +130,7 @@ class VOSDataset(Dataset):
                 [
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomResizedCrop(
-                        (self.resize_h, self.resize_w),
+                        (384, 384),
                         scale=(0.36, 1.00),
                         interpolation=InterpolationMode.BICUBIC,
                     ),
@@ -147,7 +141,7 @@ class VOSDataset(Dataset):
                 [
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomResizedCrop(
-                        (self.resize_h, self.resize_w),
+                        (384, 384),
                         scale=(0.36, 1.00),
                         interpolation=InterpolationMode.NEAREST,
                     ),
@@ -162,132 +156,78 @@ class VOSDataset(Dataset):
             ]
         )
 
-        self.train = train
+        ## Videomix initialisation
 
-        ## Augmentation haparams
-        # Probs
-        augmentation_params = para["augmentations"]
-
-        p_augm_before = sorted(
-            augmentation_params["augmentation_p"], reverse=True
-        )  # From highest to lowest probs
-
-        self.p_augm = AugmentationDataGenerator.calculate_nested_probabilities(
-            p_augm_before
+        davis_frames_root = "/work3/s220493/DAVIS/2017/trainval/JPEGImages/480p/"
+        davis_annotations_root = "/work3/s220493/DAVIS/2017/trainval/Annotations/480p/"
+        davis_validation_names_txt_path = (
+            "/work3/s220493/DAVIS/2017/trainval/ImageSets/2017/val.txt"
         )
 
-        p_horizontal_flip = augmentation_params["horizontal_flip_p"]
-
-        # Params
-        self.scale_factor_lower_lim = augmentation_params["scale_factor_lower_lim"]
-        self.scale_factor_upper_lim = augmentation_params["scale_factor_upper_lim"]
-        self.translation_lim = augmentation_params["translation_lim"]
-
-        self.transformations_list = [
-            VOSTransformations.random_horizontal_flip(p_horizontal_flip),
-            VOSTransformations.random_scale,
-            VOSTransformations.random_translation,
-        ]
-
-        self.transformation_parameters_dict = {
-            "resize_w": self.resize_w,
-            "resize_h": self.resize_h,
-            "scale_factor_lower_lim": self.scale_factor_lower_lim,
-            "scale_factor_upper_lim": self.scale_factor_upper_lim,
-            "translation_lim": self.translation_lim,
-        }
-
-        # Augmentors and datasets
-        datasets = augmentation_params["augmentation_datasets"]
-        augmentation_datasets_dict = get_augmentation_datasets_paths(datasets)
-
-        davis_root_path = para["davis_root"]
-        davis_path = os.path.join(davis_root_path, "2017", "trainval")
-
-        try:
-            dataset_probabilities = augmentation_params["dataset_probabilities"]
-        except omegaconf.errors.ConfigKeyError as e:
-            print(e)
-            print(
-                "Dataset probabilities entry in hydra config not found. Setting to equal probabilities for every dataset for uniform distribution sampling."
-            )
-            dataset_probabilities = None
-
-        self.augmentation_data_generator = AugmentationDataGenerator(
-            augmentation_datasets_dict, davis_path, dataset_probabilities
+        yt_frames_root = "/work3/s220493/YouTube/train_480p/JPEGImages/"
+        yt_annotations_root = "/work3/s220493/YouTube/train_480p/Annotations/"
+        yt_validation_names_txt_path = (
+            "/zhome/39/c/174709/git/STCN_mine/util/yv_subset.txt"
         )
 
-        # create the frame_combiner object
-        self.combiner = FrameCombiner(
-            foreground_p=0.5,
-            select_instances=True,
-            include_new_instances=True,
-            max_n_classes_per_frame=7,
+        videomix_davis_dataset = VideoMixDataset(
+            davis_frames_root,
+            davis_annotations_root,
+            davis_validation_names_txt_path,
+            "davis",
+        )
+        videomix_yt_dataset = VideoMixDataset(
+            yt_frames_root, yt_annotations_root, yt_validation_names_txt_path, "yt"
         )
 
-        print(
-            f"Augmentations, scaling: upper={self.scale_factor_upper_lim}, lower={self.scale_factor_lower_lim}"
-        )
-        print(f"Augmentations, translation: limit ratio={self.translation_lim}")
-        print(f"Augmentations, horizontal flip prob: {p_horizontal_flip}")
+        self.videomix_probability = 1  # change this!
 
-    def get_vid_frames_paths(self, idx: int) -> list:
-        video = self.videos[idx]
-        vid_im_path = path.join(self.im_root, video)
-        vid_gt_path = path.join(self.gt_root, video)
-        frames = self.frames[video]
-        return vid_im_path, vid_gt_path, frames
+        video_mix_datasets = [videomix_davis_dataset, videomix_yt_dataset]
+        video_mix_mode = VideoMixMode.SpatioTemporal
+        self.video_mixer = VideoMixer(video_mix_datasets, video_mix_mode=video_mix_mode)
 
-    def get_frames_indices(self, frames: list) -> list[int]:
-        this_max_jump = min(len(frames), self.max_jump)
-        start_idx = np.random.randint(len(frames) - this_max_jump + 1)
-        f1_idx = start_idx + np.random.randint(this_max_jump + 1) + 1
-        f1_idx = min(f1_idx, len(frames) - this_max_jump, len(frames) - 1)
-
-        f2_idx = f1_idx + np.random.randint(this_max_jump + 1) + 1
-        f2_idx = min(f2_idx, len(frames) - this_max_jump // 2, len(frames) - 1)
-
-        frames_idx = [start_idx, f1_idx, f2_idx]
-        return frames_idx
-
-    def __get_data__(self, idx):
-
+    def __getitem__(self, idx):
         video = self.videos[idx]
         info = {}
         info["name"] = video
 
-        vid_im_path, vid_gt_path, frames = self.get_vid_frames_paths(idx)
+        vid_im_path = path.join(self.im_root, video)
+        vid_gt_path = path.join(self.gt_root, video)
+        frames = self.frames[video]
 
-        # Number of successive augmentations for this __getitem__ call
-        if self.train:
-            n_augmentations = AugmentationDataGenerator.get_n_successive_augm(
-                self.p_augm
-            )
-
-            # Select from which datasets the augmentation data will come from
-            # eg. selected_datasets = ['coco', 'fss', 'davis/yt']
-            self.augmentation_data_generator.select_augmentors(
-                n_augmentations, replace=True
-            )
-
-            self.combiner.reset(max_n_classes_per_frame=7)
-
+        ## Videomix modification!
+        p = np.random.rand()
+        og_frames = sorted(list(Path(vid_im_path).iterdir()))
+        og_masks = sorted(list(Path(vid_gt_path).iterdir()))
+        if p <= self.videomix_probability:
+            frames_, masks_ = self.video_mixer.videomix(og_frames, og_masks)
         else:
-            n_augmentations = 0
+            frames_ = []
+            for fr in og_frames:
+                frames_.append(Image.open(fr).convert("RGB"))
 
-        # set the max number of classes for the combiner.
-        # since I have chosen to only include 1 additional mask,
-        # I increase the number 1 per augmentation round
-        for _ in range(n_augmentations):
-            self.combiner.max_n_classes_per_frame += 1
+            masks_ = []
+            for msk in og_masks:
+                masks_.append(Image.open(msk).convert("P"))
 
         trials = 0
         while trials < 5:
             info["frames"] = []  # Appended with actual frames
-            # Don't want to bias towards beginning/end
-            frames_idx = self.get_frames_indices(frames)
 
-            # This random reversal can be included inside the get_frames_indices to avoid repeating
+            # Don't want to bias towards beginning/end
+            # this_max_jump = min(len(frames), self.max_jump)
+            this_max_jump = min(len(frames_), self.max_jump)
+            # start_idx = np.random.randint(len(frames) - this_max_jump + 1)
+            start_idx = np.random.randint(len(frames_) - this_max_jump + 1)
+            f1_idx = start_idx + np.random.randint(this_max_jump + 1) + 1
+            # f1_idx = min(f1_idx, len(frames) - this_max_jump, len(frames) - 1)
+            f1_idx = min(f1_idx, len(frames_) - this_max_jump, len(frames_) - 1)
+
+            f2_idx = f1_idx + np.random.randint(this_max_jump + 1) + 1
+            # f2_idx = min(f2_idx, len(frames) - this_max_jump // 2, len(frames) - 1)
+            f2_idx = min(f2_idx, len(frames_) - this_max_jump // 2, len(frames_) - 1)
+
+            frames_idx = [start_idx, f1_idx, f2_idx]
             if np.random.rand() < 0.5:
                 # Reverse time
                 frames_idx = frames_idx[::-1]
@@ -295,77 +235,30 @@ class VOSDataset(Dataset):
             sequence_seed = np.random.randint(2147483647)
             images = []
             masks = []
-
-            # for intermediate augmentations
-            images_ = []
-            masks_ = []
             target_object = None
-
-            # for f_idx in frames_idx:
-            for i in range(len(frames_idx)):
-                f_idx = frames_idx[i]
-
-                jpg_name = frames[f_idx][:-4] + ".jpg"
-                png_name = frames[f_idx][:-4] + ".png"
+            for f_idx in frames_idx:
+                # jpg_name = frames[f_idx][:-4] + ".jpg"
+                # png_name = frames[f_idx][:-4] + ".png"
+                jpg_name = str(f_idx).zfill(5) + ".jpg"
+                png_name = str(f_idx).zfill(5) + ".png"
                 info["frames"].append(jpg_name)
 
-                this_im = Image.open(path.join(vid_im_path, jpg_name)).convert("RGB")
-                this_gt = Image.open(path.join(vid_gt_path, png_name)).convert("P")
-
-                images_.append(this_im)
-                masks_.append(this_gt)
-
-                ###
-
-            for augment_idx in range(n_augmentations):
-                self.combiner.reset_chosen_instances()
-                self.combiner.reset_transformation_parameters()
-
-                new_images, new_masks = (
-                    self.augmentation_data_generator.get_augmentation_data(augment_idx)
-                )
-                for i in range(len(frames_idx)):
-
-                    that_im = new_images[i]
-                    that_gt = new_masks[i]
-
-                    this_im, this_gt = self.combiner.augment_image(
-                        images_[i],
-                        masks_[i],
-                        that_im,
-                        that_gt,
-                        self.transformations_list,
-                        self.transformation_parameters_dict,
-                    )
-
-                    images_[i] = this_im
-                    masks_[i] = this_gt
-
-                    ###
-                    ####
-                    # if i == 0:
-                    #     this_im.save(f"./plots/im_{augment_idx}.jpg")
-                    #     this_gt.save(f"./plots/mask_{augment_idx}.png")
-                    ###
-
-                ###
-
-            print("*" * 10)
-            print("Debug:")
-            print(n_augmentations)
-            print(self.combiner.max_n_classes_per_frame)
-            print(np.unique(np.array(masks_[0])))
-            print("*" * 10)
-
-            for i in range(len(frames_idx)):
-                this_im = images_[i]
-                this_gt = masks_[i]
-
                 reseed(sequence_seed)
+
+                ## videomix modification
+                # this_im = Image.open(path.join(vid_im_path, jpg_name)).convert("RGB")
+                this_im = frames_[f_idx]
+                ##
+
                 this_im = self.all_im_dual_transform(this_im)
                 this_im = self.all_im_lone_transform(this_im)
-
                 reseed(sequence_seed)
+
+                ## videomix modification
+                # this_gt = Image.open(path.join(vid_gt_path, png_name)).convert("P")
+                this_gt = masks_[f_idx]
+                ###
+
                 this_gt = self.all_gt_dual_transform(this_gt)
 
                 pairwise_seed = np.random.randint(2147483647)
@@ -424,7 +317,7 @@ class VOSDataset(Dataset):
             sec_masks = np.zeros_like(tar_masks)
             selector = torch.FloatTensor([1, 0])
 
-        cls_gt = np.zeros((3, self.resize_h, self.resize_w), dtype=int)
+        cls_gt = np.zeros((3, 384, 384), dtype=int)
         cls_gt[tar_masks[:, 0] > 0.5] = 1
         cls_gt[sec_masks[:, 0] > 0.5] = 2
 
@@ -436,22 +329,6 @@ class VOSDataset(Dataset):
             "selector": selector,
             "info": info,
         }
-
-        return data
-
-    def __getitem__(self, idx):
-        """
-        data = {
-            "rgb": images,
-            "gt": tar_masks,
-            "cls_gt": cls_gt,
-            "sec_gt": sec_masks,
-            "selector": selector,
-            "info": info,
-        }
-        """
-
-        data = self.__get_data__(idx)
 
         return data
 

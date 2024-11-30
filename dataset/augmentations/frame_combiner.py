@@ -172,6 +172,7 @@ class FrameCombiner:
         new_mask_vals = np.unique(mask_new_p)[1:]  # ignore the background
 
         new_mask_copy = mask_new_p.copy()
+        new_mask_max_val = np.max()
 
         for i, el in enumerate(new_mask_vals):
             new_mask_copy[mask_new_p == el] = (

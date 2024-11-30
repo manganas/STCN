@@ -6,19 +6,19 @@ source /work3/s220493/venv/bin/activate
 
 ## Saved model relevant
 base_path="/work3/s220493/saves/"
-augm_type_dir="generated/sdxl-turbo/mistal_nltk_simple_pipeline/" 
-file_part="checkpoint_davis-1-generated-mistral_nltk_simple_7k_"
+augm_type_dir="hparams_rerun/p_augm/" 
+file_part="checkpoint_davis-augm_p-075-_"
 
 STCN_path="/zhome/39/c/174709/git/STCN_mine"
 davis2017_path="/zhome/39/c/174709/git/davis2017-evaluation"
 
 
 ## Output files relevant
-output_path="outputs/generated/sdxl_mistral_nltk_hypo_7k/mistral_nltk_7k_"
+output_path="outputs/rerun_p/p075/p075_"
 
 cleanup_names=("bike-packing" "blackswan" "bmx-trees" "breakdance" "camel" "car-roundabout" "car-shadow" "cows" "dance-twirl" "dog" "dogs-jump" "drift-chicane" "drift-straight" "goat" "gold-fish" "horsejump-high" "india" "judo" "kite-surf" "lab-coat" "libby" "loading" "mbike-trick" "motocross-jump" "paragliding-launch" "parkour" "pigs" "scooter-black" "shooting" "soapbox")
 
-for i in {2000..9004}
+for i in {1500..7500}
 do
         
     saved_model="${base_path}${augm_type_dir}${file_part}${i}.pth"

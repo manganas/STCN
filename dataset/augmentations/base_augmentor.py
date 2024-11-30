@@ -55,7 +55,7 @@ class AugmentationDataGenerator:
 
         self.datasets = datasets
 
-        if probabilities:
+        if not (probabilities is None) and len(probabilities) > 0:
 
             if len(datasets) >= len(probabilities):
                 # fill in the rest of probs so that they add to 1
@@ -121,6 +121,10 @@ class AugmentationDataGenerator:
                 "Number of augmentations larger than number of available datasets without replace. Choice with replace."
             )
             replace = True
+
+        if not list(self.datasets.keys()):
+            self._selected_datasets = []
+            return
 
         self._selected_datasets = np.random.choice(
             list(self.datasets.keys()),

@@ -22,7 +22,8 @@ from eval_davis_online import online_davis_eval
 
 # from dataset.vos_dataset_augm_multi import VOSDataset
 
-from dataset.vos_dataset_augm_multi_datasets import VOSDataset
+# from dataset.vos_dataset_augm_multi_datasets import VOSDataset
+from dataset.vos_dataset_videomix import VOSDataset
 
 from util.plotting_utils import plot_frame_of_batch
 
@@ -492,7 +493,7 @@ def train(para):
                     {
                         "Training loss": train_total_loss / (len(train_loader)),
                         "Training iou": train_iou / (len(train_loader)) * b,
-                        "Validation loss": val_total_loss / (len(val_loader)),
+                        "Validation loss": val_total_loss / (1 + 0 * len(val_loader)),
                         "Validation iou": val_iou / (len(val_loader)) * b,
                         "Epoch": e,
                         "J mean": ious_mean,
@@ -519,6 +520,8 @@ def train(para):
             #     best_val_iou = ious_mean
             #     model.save_best_model(exp_name)
             #     print(f"saved best model with val iou: {best_val_iou}")
+
+            ######### SAVE THE LAST 10 models!!
 
             if e in last_online_validation_epochs:  # and local_rank == 0:
                 model.save_model(exp_name, e)

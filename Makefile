@@ -21,7 +21,7 @@ requirements: environment
 
 .PHONY: eval_davis
 eval_davis:
-	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS/2017' --output outputs/comparison/davis_from_st0 --model /work3/s220493/saves/comparison/checkpoint_davis-1-from-pretrained_static_2990.pth
+	$(PYTHON_INTERPRETER) eval_davis.py --davis_path '/work3/s220493/DAVIS/2017' --output outputs/dokimi --model /work3/s220493/saves/hparams_rerun/p_augm/checkpoint_davis-augm_p-075-_7500.pth
 
 .PHONY: eval_davis_augmented
 eval_davis_augmented:
